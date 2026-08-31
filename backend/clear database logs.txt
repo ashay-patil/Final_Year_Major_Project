@@ -1,0 +1,12 @@
+# 1. Clear database
+mongosh
+use mediflow_ai
+db.patients.deleteMany({})
+db.nurse_tasks.deleteMany({})
+db.discharge_logs.deleteMany({})
+exit
+
+# 2. Restart backend (reloads fresh data)
+python app.py
+
+# 3. In the UI, follow this workflow:
