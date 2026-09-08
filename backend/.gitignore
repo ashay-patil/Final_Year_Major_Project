@@ -1,2 +1,10 @@
 .env
 /venv
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ChromaDB local database
+chroma_db/
