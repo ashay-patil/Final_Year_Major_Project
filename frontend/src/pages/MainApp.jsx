@@ -15,90 +15,10 @@ import {
   ScanLine, Upload, ImageIcon    // <-- add these
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8000';
-
-const apiService = {
-  getPatients: () => fetch(`${API_BASE_URL}/api/patients`).then(r => r.json()),
-  runDischargeDetection: () => fetch(`${API_BASE_URL}/api/run-discharge-detection`, { method: 'POST' }).then(r => r.json()),
-  approvePatient: (patientId) => fetch(`${API_BASE_URL}/api/patients/${patientId}/approve`, { method: 'POST' }).then(r => r.json()),
-  getNurseTasks: (patientId) => fetch(`${API_BASE_URL}/api/nurse-tasks/${patientId}`).then(r => r.json()),
-  updateNurseTasks: (patientId, data) => fetch(`${API_BASE_URL}/api/nurse-tasks/${patientId}/update`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(r => r.json()),
-  addNurseTask: (patientId, item) => fetch(`${API_BASE_URL}/api/nurse-tasks/${patientId}/add`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ item })
-  }).then(r => r.json()),
-  getPharmacyPatients: () => fetch(`${API_BASE_URL}/api/pharmacy`).then(r => r.json()),
-  getPharmacyPrescription: (patientId) => fetch(`${API_BASE_URL}/api/pharmacy/${patientId}`).then(r => r.json()),
-  completePharmacy: (patientId, prescription) => fetch(`${API_BASE_URL}/api/pharmacy/${patientId}/complete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prescription })
-  }).then(r => r.json()),
-  getBillingPatients: () => fetch(`${API_BASE_URL}/api/billing`).then(r => r.json()),
-  generateBill: (patientId) => fetch(`${API_BASE_URL}/api/billing/${patientId}/generate`, { method: 'POST' }).then(r => r.json()),
-  sendToGuardian: (patientId) => fetch(`${API_BASE_URL}/api/billing/${patientId}/send-to-guardian`, { method: 'POST' }).then(r => r.json()),
-  getSummaryPatients: () => fetch(`${API_BASE_URL}/api/summary`).then(r => r.json()),
-  getPatientSummary: (patientId) => fetch(`${API_BASE_URL}/api/patients/${patientId}/summary`).then(r => r.json()),
-  downloadPDF: (patientId, type) => `${API_BASE_URL}/api/patients/${patientId}/download-${type}`,
-
-  chatbot: (message, patientId, sessionId) => fetch(`${API_BASE_URL}/api/chatbot`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, patient_id: patientId, session_id: sessionId })
-  }).then(r => r.json()),
-
-  getReadmissionRisk: (patientId) => fetch(`${API_BASE_URL}/api/patients/${patientId}/readmission-risk`).then(r => r.json()),
-
-  getVitalsHistory: (patientId) => fetch(`${API_BASE_URL}/api/patients/${patientId}/vitals-history`).then(r => r.json()),
-
-  getVitalsAnomalies: (patientId) => fetch(`${API_BASE_URL}/api/patients/${patientId}/vitals-anomalies`).then(r => r.json()),
-
-  processVoiceNotes: (rawText, patientId) => fetch(`${API_BASE_URL}/api/voice-notes/process`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw_text: rawText, patient_id: patientId })
-  }).then(r => r.json()),
-
-  saveClinicalNote: (patientId, note, soapFormat) => fetch(`${API_BASE_URL}/api/patients/${patientId}/clinical-notes`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ note, soap_format: soapFormat })
-  }).then(r => r.json()),
-
-  getAnalytics: () => fetch(`${API_BASE_URL}/api/analytics/overview`).then(r => r.json()),
-  getInsights: () => fetch(`${API_BASE_URL}/api/analytics/insights`).then(r => r.json()),
-
-  translateText: (text, targetLanguage) => fetch(`${API_BASE_URL}/api/translate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, target_language: targetLanguage })
-  }).then(r => r.json()),
-  checkDrugInteractions: (medications) => fetch(`${API_BASE_URL}/api/check-drug-interactions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ medications })
-  }).then(r => r.json()),
-  getPatientJourney: (patientId) => fetch(`${API_BASE_URL}/api/patients/${patientId}/journey`).then(r => r.json()),
-  getPatientQR: (patientId) => fetch(`${API_BASE_URL}/api/patients/${patientId}/qrcode`).then(r => r.json()),
-  analyzeXray: (file, pathology) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (pathology) formData.append('pathology', pathology);
-    return fetch(`${API_BASE_URL}/api/xray/analyze`, {
-      method: 'POST',
-      body: formData
-    }).then(r => {
-      if (!r.ok) throw new Error('Analysis failed');
-      return r.json();
-    });
-  },
-};
-
+import CommandCenter from './CommandCenter';
+import Patient360 from './Patient360';
+import AIActivityCenter from './AIActivityCenter';
+import apiService, { API_BASE_URL } from '../services/api';
 // Toast Context
 const ToastContext = createContext();
 
@@ -336,7 +256,9 @@ const MainDashboard = ({ onNavigate, onOpenChatbot }) => {
     { name: 'Summary Portal', icon: FileText, path: 'summary', color: 'from-purple-600 to-purple-400', shadow: 'hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]', desc: 'Discharge summaries & translation' },
     { name: 'Billing Portal', icon: DollarSign, path: 'billing', color: 'from-red-600 to-red-400', shadow: 'hover:shadow-[0_0_30px_rgba(239,68,68,0.3)]', desc: 'Generate invoices & notify guardian' },
     { name: 'Analytics Portal', icon: BarChart3, path: 'analytics', color: 'from-cyan-600 to-cyan-400', shadow: 'hover:shadow-[0_0_30px_rgba(6,182,212,0.3)]', desc: 'Hospital performance metrics' },
-    { name: 'AI Assistant', icon: Brain, action: onOpenChatbot, color: 'from-emerald-600 to-emerald-400', shadow: 'hover:shadow-[0_0_30px_rgba(16,185,129,0.3)]', desc: 'Ask questions & get insights' },
+    { name: 'Command Center', icon: Activity, path: 'command', color: 'from-emerald-600 to-teal-400', shadow: 'hover:shadow-[0_0_30px_rgba(16,185,129,0.3)]', desc: 'Hospital-wide telemetry & active alerts' },
+    { name: 'AI Activity Center', icon: Brain, path: 'aiactivity', color: 'from-purple-600 to-indigo-400', shadow: 'hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]', desc: 'Live multi-agent orchestration feed' },
+    { name: 'AI Assistant', icon: Brain, action: onOpenChatbot, color: 'from-blue-600 to-indigo-400', shadow: 'hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]', desc: 'Ask questions & get insights' },
     { name: 'Chest X-Ray AI', icon: ScanLine, path: 'xray', color: 'bg-teal-600', desc: 'Grad-CAM explainable diagnosis' },
     { name: 'Insurance Portal', icon: Shield, path: 'insurance', color: 'from-indigo-600 to-violet-400', shadow: 'hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]', desc: 'AI insurance coverage & claims' },
   ];
@@ -980,9 +902,9 @@ const PharmacyPortal = () => {
     const meds = [];
     for (const line of lines) {
       const trimmed = line.trim();
-      if (trimmed.match(/^[\d]+[\.)\s]/) || trimmed.match(/^[-•*]\s/)) {
-        const cleaned = trimmed.replace(/^[\d]+[\.)\s]+/, '').replace(/^[-•*]\s+/, '');
-        const medName = cleaned.split(/[\(\-:,\d]/)[0].trim();
+      if (trimmed.match(/^[\d]+[.)\s]/) || trimmed.match(/^[-•*]\s/)) {
+        const cleaned = trimmed.replace(/^[\d]+[.)\s]+/, '').replace(/^[-•*]\s+/, '');
+        const medName = cleaned.split(/[(-:,\d]/)[0].trim();
         if (medName.length > 2) meds.push(medName);
       }
     }
@@ -1673,10 +1595,18 @@ const AppContent = () => {
   const [currentView, setCurrentView] = useState('home');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatbotOpen, setChatbotOpen] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState(null);
+  const [previousView, setPreviousView] = useState('home');
 
   if (!isAuthenticated) {
     return <AuthPage onLogin={() => setIsAuthenticated(true)} />;
   }
+
+  const handleNavigateToPatient = (patientId, fromView) => {
+    setSelectedPatientId(patientId);
+    setPreviousView(fromView || currentView);
+    setCurrentView('patient360');
+  };
 
   const renderView = () => {
     switch (currentView) {
@@ -1689,6 +1619,9 @@ const AppContent = () => {
       case 'analytics': return <AnalyticsDashboard />;
       case 'xray': return <XrayDiagnosisPortal />;
       case 'insurance': return <InsurancePortal />;
+      case 'command': return <CommandCenter onNavigateToPatient={(id) => handleNavigateToPatient(id, 'command')} />;
+      case 'patient360': return <Patient360 patientId={selectedPatientId} onBack={() => setCurrentView(previousView || 'command')} />;
+      case 'aiactivity': return <AIActivityCenter onNavigateToPatient={(id) => handleNavigateToPatient(id, 'aiactivity')} />;
       default: return <MainDashboard onNavigate={setCurrentView} onOpenChatbot={() => setChatbotOpen(true)} />;
     }
   };
@@ -1741,7 +1674,9 @@ const AppContent = () => {
                 { label: 'Summary Portal', value: 'summary', icon: FileText, color: 'text-purple-400' },
                 { label: 'Billing Portal', value: 'billing', icon: DollarSign, color: 'text-red-400' },
                 { label: 'Analytics Portal', value: 'analytics', icon: BarChart3, color: 'text-cyan-400' },
-                { label: 'Chest X-Ray AI', value: 'xray', icon: ScanLine }
+                { label: 'Chest X-Ray AI', value: 'xray', icon: ScanLine },
+                { label: 'Command Center', value: 'command', icon: Activity, color: 'text-emerald-400' },
+                { label: 'AI Activity Center', value: 'aiactivity', icon: Brain, color: 'text-purple-400' }
               ].map(item => {
                 const isActive = currentView === item.value;
                 return (

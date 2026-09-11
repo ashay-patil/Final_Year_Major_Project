@@ -54,6 +54,36 @@ def root():
 def get_patients():
     """Get all patients"""
     patients = list(patients_collection.find({}, {"_id": 0}))
+    
+    # Augment with anomaly detection using existing backend logic
+    try:
+        from agents.vitals_monitor import detect_anomalies
+        from datetime import datetime
+        for p in patients:
+            vitals = p.get("vital_signs", {})
+            bp = vitals.get("blood_pressure", "120/80").split("/")
+            try:
+                sys_bp, dia_bp = int(bp[0]), int(bp[1])
+            except:
+                sys_bp, dia_bp = 120, 80
+                
+            current_reading = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "bp_systolic": sys_bp,
+                "bp_diastolic": dia_bp,
+                "heart_rate": vitals.get("heart_rate", 80),
+                "temperature": vitals.get("temperature", 98.6),
+                "oxygen_saturation": vitals.get("oxygen_saturation", 98),
+                "respiratory_rate": vitals.get("respiratory_rate", 16)
+            }
+            
+            anomalies = detect_anomalies([current_reading])
+            p["has_anomalies"] = len(anomalies) > 0
+            p["anomalies"] = anomalies
+    except Exception as e:
+        print(f"Error augmenting anomalies: {e}")
+        pass
+        
     return {"patients": patients}
 
 @app.get("/api/patients/{patient_id}")
