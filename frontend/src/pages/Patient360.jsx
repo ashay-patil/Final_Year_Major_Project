@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Calendar, Activity, Pill, CheckCircle, FileText, Clock, HeartPulse, ShieldAlert, ArrowLeft, Brain, ScanLine } from 'lucide-react';
+import { User, Calendar, Activity, Pill, CheckCircle, FileText, Clock, HeartPulse, ShieldAlert, ArrowLeft, ArrowRight, Brain, ScanLine, X } from 'lucide-react';
 import apiService from '../services/api';
 
 import RiskGauge from '../components/RiskGauge';
@@ -185,12 +185,24 @@ export default function Patient360({ patientId, onBack }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDrug(false)} />
           <div className="relative z-10 w-full max-w-4xl h-[80vh] overflow-hidden">
-             <DrugInteractionChecker />
+             <DrugInteractionChecker medications={patient.medications && Array.isArray(patient.medications) ? patient.medications : ['Aspirin', 'Clopidogrel', 'Metoprolol', 'Lisinopril']} />
              <button onClick={() => setShowDrug(false)} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white"><ArrowLeft className="w-5 h-5"/></button>
           </div>
         </div>
       )}
-      <QRCodeDisplay patientId={patientId} patientName={patient.name} isOpen={showQR} onClose={() => setShowQR(false)} />
+      {showQR && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowQR(false)}>
+          <div className="relative" onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setShowQR(false)} 
+              className="absolute -top-12 right-0 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg flex items-center gap-1 text-sm font-medium transition-colors"
+            >
+              <X className="w-4 h-4" /> Close
+            </button>
+            <QRCodeDisplay patientId={patientId} patientName={patient.name} compact={false} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

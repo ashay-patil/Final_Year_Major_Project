@@ -77,8 +77,8 @@ export default function CommandCenter({ onNavigateToPatient }) {
                 {requiresAttention.map(p => {
                   return (
                     <tr key={p.patient_id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-4">
-                        <div className="font-semibold text-gray-800">{p.name}</div>
+                      <td className="px-5 py-4 cursor-pointer" onClick={() => onNavigateToPatient(p.patient_id)}>
+                        <div className="font-semibold text-gray-800 hover:text-blue-600 transition-colors">{p.name}</div>
                         <div className="text-xs text-gray-500">{p.patient_id}</div>
                       </td>
                       <td className="px-5 py-4">
@@ -92,9 +92,9 @@ export default function CommandCenter({ onNavigateToPatient }) {
                       <td className="px-5 py-4 text-right">
                         <button 
                           onClick={() => onNavigateToPatient(p.patient_id)}
-                          className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors inline-flex"
+                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors inline-flex items-center gap-1.5 text-xs font-semibold"
                         >
-                          <ArrowRight className="w-4 h-4" />
+                          View Patient <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -151,10 +151,20 @@ export default function CommandCenter({ onNavigateToPatient }) {
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mt-1.5"></div>
                 {i !== 5 && <div className="w-0.5 h-full bg-gray-100 mt-1.5"></div>}
               </div>
-              <div className="pb-4">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-800 text-sm capitalize">{log.action.replace(/_/g, ' ')}</span>
-                  <span className="text-xs text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+              <div className="pb-4 flex-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-gray-800 text-sm capitalize">{log.action.replace(/_/g, ' ')}</span>
+                    <span className="text-xs text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+                  </div>
+                  {log.patient_id && (
+                    <button
+                      onClick={() => onNavigateToPatient(log.patient_id)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 hover:underline"
+                    >
+                      View Patient {log.patient_id} <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
                 <div className="text-sm text-gray-600 mt-1">{log.details}</div>
                 <div className="text-xs font-medium text-blue-600 mt-1 flex items-center gap-1">

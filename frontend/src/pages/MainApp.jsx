@@ -18,7 +18,7 @@ import {
 import CommandCenter from './CommandCenter';
 import Patient360 from './Patient360';
 import AIActivityCenter from './AIActivityCenter';
-import apiService from '../services/api';
+import apiService, { API_BASE_URL } from '../services/api';
 // Toast Context
 const ToastContext = createContext();
 
@@ -256,7 +256,9 @@ const MainDashboard = ({ onNavigate, onOpenChatbot }) => {
     { name: 'Summary Portal', icon: FileText, path: 'summary', color: 'from-purple-600 to-purple-400', shadow: 'hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]', desc: 'Discharge summaries & translation' },
     { name: 'Billing Portal', icon: DollarSign, path: 'billing', color: 'from-red-600 to-red-400', shadow: 'hover:shadow-[0_0_30px_rgba(239,68,68,0.3)]', desc: 'Generate invoices & notify guardian' },
     { name: 'Analytics Portal', icon: BarChart3, path: 'analytics', color: 'from-cyan-600 to-cyan-400', shadow: 'hover:shadow-[0_0_30px_rgba(6,182,212,0.3)]', desc: 'Hospital performance metrics' },
-    { name: 'AI Assistant', icon: Brain, action: onOpenChatbot, color: 'from-emerald-600 to-emerald-400', shadow: 'hover:shadow-[0_0_30px_rgba(16,185,129,0.3)]', desc: 'Ask questions & get insights' },
+    { name: 'Command Center', icon: Activity, path: 'command', color: 'from-emerald-600 to-teal-400', shadow: 'hover:shadow-[0_0_30px_rgba(16,185,129,0.3)]', desc: 'Hospital-wide telemetry & active alerts' },
+    { name: 'AI Activity Center', icon: Brain, path: 'aiactivity', color: 'from-purple-600 to-indigo-400', shadow: 'hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]', desc: 'Live multi-agent orchestration feed' },
+    { name: 'AI Assistant', icon: Brain, action: onOpenChatbot, color: 'from-blue-600 to-indigo-400', shadow: 'hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]', desc: 'Ask questions & get insights' },
     { name: 'Chest X-Ray AI', icon: ScanLine, path: 'xray', color: 'bg-teal-600', desc: 'Grad-CAM explainable diagnosis' },
     { name: 'Insurance Portal', icon: Shield, path: 'insurance', color: 'from-indigo-600 to-violet-400', shadow: 'hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]', desc: 'AI insurance coverage & claims' },
   ];
@@ -900,9 +902,9 @@ const PharmacyPortal = () => {
     const meds = [];
     for (const line of lines) {
       const trimmed = line.trim();
-      if (trimmed.match(/^[\d]+[\.)\s]/) || trimmed.match(/^[-•*]\s/)) {
-        const cleaned = trimmed.replace(/^[\d]+[\.)\s]+/, '').replace(/^[-•*]\s+/, '');
-        const medName = cleaned.split(/[\(\-:,\d]/)[0].trim();
+      if (trimmed.match(/^[\d]+[.)\s]/) || trimmed.match(/^[-•*]\s/)) {
+        const cleaned = trimmed.replace(/^[\d]+[.)\s]+/, '').replace(/^[-•*]\s+/, '');
+        const medName = cleaned.split(/[(-:,\d]/)[0].trim();
         if (medName.length > 2) meds.push(medName);
       }
     }
@@ -1594,10 +1596,17 @@ const AppContent = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatbotOpen, setChatbotOpen] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState(null);
+  const [previousView, setPreviousView] = useState('home');
 
   if (!isAuthenticated) {
     return <AuthPage onLogin={() => setIsAuthenticated(true)} />;
   }
+
+  const handleNavigateToPatient = (patientId, fromView) => {
+    setSelectedPatientId(patientId);
+    setPreviousView(fromView || currentView);
+    setCurrentView('patient360');
+  };
 
   const renderView = () => {
     switch (currentView) {
@@ -1610,9 +1619,9 @@ const AppContent = () => {
       case 'analytics': return <AnalyticsDashboard />;
       case 'xray': return <XrayDiagnosisPortal />;
       case 'insurance': return <InsurancePortal />;
-      case 'command': return <CommandCenter onNavigateToPatient={(id) => { setSelectedPatientId(id); setCurrentView('patient360'); }} />;
-      case 'patient360': return <Patient360 patientId={selectedPatientId} onBack={() => setCurrentView('command')} />;
-      case 'aiactivity': return <AIActivityCenter onNavigateToPatient={(id) => { setSelectedPatientId(id); setCurrentView('patient360'); }} />;
+      case 'command': return <CommandCenter onNavigateToPatient={(id) => handleNavigateToPatient(id, 'command')} />;
+      case 'patient360': return <Patient360 patientId={selectedPatientId} onBack={() => setCurrentView(previousView || 'command')} />;
+      case 'aiactivity': return <AIActivityCenter onNavigateToPatient={(id) => handleNavigateToPatient(id, 'aiactivity')} />;
       default: return <MainDashboard onNavigate={setCurrentView} onOpenChatbot={() => setChatbotOpen(true)} />;
     }
   };
