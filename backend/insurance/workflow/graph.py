@@ -3,6 +3,7 @@ from . import nodes
 from .persistence import save_state, load_state
 from insurance.claim_service import transition_state
 from insurance.audit import write_audit_event
+from database import db
 
 class InsuranceWorkflow:
     """Manages the claim workflow state machine."""
@@ -40,21 +41,41 @@ class InsuranceWorkflow:
         return {"claim_id": claim_id, "state": current, "message": "No handler for state or terminal state reached"}
     
     def resume_after_review(self, claim_id, action, notes="", edited_fields=None):
-        """Resume workflow after HITL review."""
-        if action == "approve":
-            transition_state(claim_id, ClaimState.WAITING_FOR_HUMAN_APPROVAL, ClaimState.CLAIM_SUBMITTED)
-            write_audit_event(claim_id, "Reviewer", f"Approved claim. Notes: {notes}", "Success", edited_fields or {})
+        if action in ("approve", "APPROVE"):
+            transition_state(claim_id, "CLAIM_SUBMITTED", "reviewer", f"Approved. {notes}")
             save_state(claim_id, ClaimState.CLAIM_SUBMITTED)
-            return self.advance(claim_id)
-        elif action == "reject":
-            transition_state(claim_id, ClaimState.WAITING_FOR_HUMAN_APPROVAL, ClaimState.REJECTED)
-            write_audit_event(claim_id, "Reviewer", f"Rejected claim. Notes: {notes}", "Failed", {})
-            save_state(claim_id, ClaimState.REJECTED)
-            return {"claim_id": claim_id, "state": ClaimState.REJECTED}
-        elif action == "query":
-            transition_state(claim_id, ClaimState.WAITING_FOR_HUMAN_APPROVAL, ClaimState.ADDITIONAL_INFORMATION_REQUIRED)
-            write_audit_event(claim_id, "Reviewer", f"Requested additional info. Notes: {notes}", "Pending", {})
-            save_state(claim_id, ClaimState.ADDITIONAL_INFORMATION_REQUIRED)
-            return {"claim_id": claim_id, "state": ClaimState.ADDITIONAL_INFORMATION_REQUIRED}
+            write_audit_event(claim_id, "reviewer", "HUMAN_APPROVED", metadata={"notes": notes})
+            
+            # Simulate HCX submission
+            from insurance.adapters import get_hcx_adapter
+            hcx = get_hcx_adapter()
+            claim = db["claims"].find_one({"claim_id": claim_id}, {"_id": 0})
+            validation = hcx.validate(claim or {})
+            if validation.get("valid"):
+                send_result = hcx.send(claim or {})
+                write_audit_event(claim_id, "system", "CLAIM_SUBMITTED", metadata=send_result)
+            
+            transition_state(claim_id, "PENDING", "system", "Submitted to insurer, awaiting response")
+            save_state(claim_id, ClaimState.PENDING)
+            
+            return {"claim_id": claim_id, "state": "PENDING", "message": "Claim submitted to insurer"}
         
-        return {"claim_id": claim_id, "error": "Invalid action"}
+        elif action in ("reject", "REJECT"):
+            transition_state(claim_id, "REJECTED", "reviewer", f"Rejected. {notes}")
+            save_state(claim_id, ClaimState.REJECTED)
+            write_audit_event(claim_id, "reviewer", "CLAIM_REJECTED", metadata={"notes": notes})
+            return {"claim_id": claim_id, "state": "REJECTED", "message": "Claim rejected by reviewer"}
+        
+        elif action in ("request_information", "REQUEST_INFORMATION"):
+            transition_state(claim_id, "ADDITIONAL_INFORMATION_REQUIRED", "reviewer", f"Info requested. {notes}")
+            save_state(claim_id, ClaimState.ADDITIONAL_INFORMATION_REQUIRED)
+            write_audit_event(claim_id, "reviewer", "DOCUMENT_REQUESTED", metadata={"notes": notes})
+            return {"claim_id": claim_id, "state": "ADDITIONAL_INFORMATION_REQUIRED", "message": "Additional info requested"}
+        
+        elif action in ("edit", "EDIT"):
+            # Apply edits and keep at WAITING_FOR_HUMAN_APPROVAL for re-review
+            if edited_fields:
+                db["claims"].update_one({"claim_id": claim_id}, {"$set": edited_fields})
+            return {"claim_id": claim_id, "state": "WAITING_FOR_HUMAN_APPROVAL", "message": "Edits applied, re-review required"}
+        
+        return {"claim_id": claim_id, "error": f"Invalid action: {action}"}

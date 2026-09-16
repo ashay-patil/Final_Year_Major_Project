@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Shield, FileText, CheckCircle, AlertTriangle, AlertCircle, Edit2, Send, Brain, Info, Upload } from 'lucide-react';
+import { X, Shield, FileText, CheckCircle, AlertTriangle, AlertCircle, Edit2, Send, Brain, Info, Upload, DollarSign } from 'lucide-react';
 import apiService from '../../services/api';
 
 const ClaimReviewModal = ({ claimId, isOpen, onClose, onReviewComplete }) => {

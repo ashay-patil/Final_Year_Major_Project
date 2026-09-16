@@ -36,10 +36,61 @@ def check_insurer_tieup(state):
 
 def collect_documents(state):
     claim_id = state["claim_id"]
-    transition_state(claim_id, ClaimState.TIE_UP_CONFIRMED, ClaimState.DOCUMENTS_COLLECTED)
-    write_audit_event(claim_id, "System", "Documents collected", "Success", {})
-    save_state(claim_id, ClaimState.DOCUMENTS_COLLECTED)
-    return {"claim_id": claim_id, "state": ClaimState.DOCUMENTS_COLLECTED}
+
+    from database import db
+
+    required = {
+        "insurance_card",
+        "id_proof",
+        "prescription",
+        "discharge_summary"
+    }
+
+    documents = db["insurance_documents"].find(
+        {"claim_id": claim_id},
+        {"_id": 0, "doc_type": 1}
+    )
+
+    uploaded = {
+        doc.get("doc_type")
+        for doc in documents
+    }
+
+    missing = required - uploaded
+
+    if missing:
+        return {
+            "claim_id": claim_id,
+            "state": ClaimState.TIE_UP_CONFIRMED,
+            "pause": True,
+            "waiting_for": "documents",
+            "missing_documents": sorted(missing)
+        }
+
+    transition_state(
+        claim_id,
+        ClaimState.TIE_UP_CONFIRMED,
+        ClaimState.DOCUMENTS_COLLECTED,
+        "All required documents collected"
+    )
+
+    write_audit_event(
+        claim_id,
+        "System",
+        "Documents collected",
+        "Success",
+        {}
+    )
+
+    save_state(
+        claim_id,
+        ClaimState.DOCUMENTS_COLLECTED
+    )
+
+    return {
+        "claim_id": claim_id,
+        "state": ClaimState.DOCUMENTS_COLLECTED
+    }
 
 def analyze_policy(state):
     claim_id = state["claim_id"]

@@ -1,5 +1,9 @@
 export const API_BASE_URL = "http://localhost:8000";
-
+const handleResponse = async (r) => {
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || `${r.status} ${r.statusText}`);
+  return data;
+};
 export const apiService = {
   getPatients: () => fetch(`${API_BASE_URL}/api/patients`).then(r => r.json()),
   getPatient: (patientId) => fetch(`${API_BASE_URL}/api/patients/${patientId}`).then(r => r.json()),
@@ -85,9 +89,9 @@ export const apiService = {
 
   // Insurance Claim Automation
   insuranceRegister: (patientId) => fetch(`${API_BASE_URL}/api/insurance/patients/${patientId}/register`, { method: 'POST' }).then(r => r.json()),
-  insuranceCashlessSelect: (patientId, selected) => fetch(`${API_BASE_URL}/api/insurance/patients/${patientId}/cashless-selection`, {
+  insuranceCashlessSelect: (patientId, selected, claimId) => fetch(`${API_BASE_URL}/api/insurance/patients/${patientId}/cashless-selection`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cashless_selected: selected })
+    body: JSON.stringify({ cashless_selected: selected, claim_id: claimId })
   }).then(r => r.json()),
   insuranceCaptureInfo: (claimId, data) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/insurance-info`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -126,6 +130,25 @@ export const apiService = {
   insuranceGetAllClaims: () => fetch(`${API_BASE_URL}/api/insurance/claims`).then(r => r.json()),
   insuranceGetPendingReviews: () => fetch(`${API_BASE_URL}/api/insurance/human-reviews/pending`).then(r => r.json()),
   seedInsuranceData: () => fetch(`${API_BASE_URL}/api/seed-insurance`, { method: 'POST' }).then(r => r.json()),
+  insuranceConfirmDoc: (claimId, documentId, fields) =>
+  fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/documents/${documentId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  }).then(handleResponse),
+  insuranceUploadDoc: (claimId, file, docType) => {
+    const fd = new FormData(); fd.append('file', file); fd.append('doc_type', docType);
+    return fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/documents`,
+      { method: 'POST', body: fd }).then(handleResponse);
+  },
+  insuranceAdvanceClaim: (claimId) =>
+  fetch(
+    `${API_BASE_URL}/api/insurance/claims/${claimId}/advance`,
+    {
+      method: "POST"
+    }
+  ).then(handleResponse),
+  insuranceSubmitForReview: (claimId) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/submit-for-review`, { method: 'POST' }).then(r => r.json()),
 };
 export default apiService;
 
