@@ -82,6 +82,50 @@ export const apiService = {
       return r.json();
     });
   },
+
+  // Insurance Claim Automation
+  insuranceRegister: (patientId) => fetch(`${API_BASE_URL}/api/insurance/patients/${patientId}/register`, { method: 'POST' }).then(r => r.json()),
+  insuranceCashlessSelect: (patientId, selected) => fetch(`${API_BASE_URL}/api/insurance/patients/${patientId}/cashless-selection`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cashless_selected: selected })
+  }).then(r => r.json()),
+  insuranceCaptureInfo: (claimId, data) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/insurance-info`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
+  insuranceTieupStatus: (claimId) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/tieup-status`).then(r => r.json()),
+  insuranceUploadDoc: (claimId, file, docType) => {
+    const fd = new FormData(); fd.append('file', file); fd.append('doc_type', docType);
+    return fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/documents`, { method: 'POST', body: fd }).then(r => r.json());
+  },
+  insuranceMissingDocs: (claimId) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/missing-documents`).then(r => r.json()),
+  insurancePolicyAsk: (claimId, question) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/policy/ask`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question })
+  }).then(r => r.json()),
+  insuranceGetReview: (claimId) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/review`).then(r => r.json()),
+  insuranceSubmitReview: (claimId, action, notes, reviewer) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/review`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, notes, reviewer: reviewer || 'Staff' })
+  }).then(r => r.json()),
+  insuranceGetClaim: (claimId) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}`).then(r => r.json()),
+  insuranceGetAudit: (claimId) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/audit`).then(r => r.json()),
+  insuranceSimulateResponse: (claimId, outcome) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/insurer-response`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outcome })
+  }).then(r => r.json()),
+  insuranceMarkPayment: (claimId, amount, reference) => fetch(`${API_BASE_URL}/api/insurance/claims/${claimId}/mark-payment-received`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ received_amount: amount, reference_number: reference })
+  }).then(r => r.json()),
+  insuranceGetDirectory: () => fetch(`${API_BASE_URL}/api/insurance/insurer-directory`).then(r => r.json()),
+  insuranceAddInsurer: (data) => fetch(`${API_BASE_URL}/api/insurance/insurer-directory`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
+  insuranceGetAllClaims: () => fetch(`${API_BASE_URL}/api/insurance/claims`).then(r => r.json()),
+  insuranceGetPendingReviews: () => fetch(`${API_BASE_URL}/api/insurance/human-reviews/pending`).then(r => r.json()),
+  seedInsuranceData: () => fetch(`${API_BASE_URL}/api/seed-insurance`, { method: 'POST' }).then(r => r.json()),
 };
 export default apiService;
 

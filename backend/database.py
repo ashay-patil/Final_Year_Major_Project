@@ -7,7 +7,7 @@ load_dotenv()
 
 # MongoDB connection
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017/")
-DATABASE_NAME = "mediflow_ai"
+DATABASE_NAME = "mediflow_ai_insurence"
 
 # Nurse email for notifications
 NURSE_EMAIL = os.getenv("NURSE_EMAIL", "nurse@stjudes.com")
@@ -20,6 +20,21 @@ patients_collection = db["patients"]
 discharge_logs_collection = db["discharge_logs"]
 nurse_tasks_collection = db["nurse_tasks"]
 
+# Insurance Claim Automation Collections
+abha_profiles = db["abha_profiles"]
+insurance_policies_v2 = db["insurance_policies_v2"]
+insurer_directory = db["insurer_directory"]
+hospital_insurer_tieups = db["hospital_insurer_tieups"]
+insurance_documents = db["insurance_documents"]
+claims_collection = db["claims"]
+claim_documents = db["claim_documents"]
+claim_messages = db["claim_messages"]
+claim_status_history = db["claim_status_history"]
+hcx_transactions = db["hcx_transactions"]
+human_reviews = db["human_reviews"]
+payment_transactions = db["payment_transactions"]
+notifications_collection = db["notifications"]
+workflow_states = db["workflow_states"]
 def get_database():
     return db
 

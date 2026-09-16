@@ -1236,6 +1236,16 @@ def recommend_insurance(data: dict):
         return {"recommendation": f"Unable to generate recommendation: {str(e)}", "all_plans": []}
 
 
+# ==================== INSURANCE CLAIM AUTOMATION ====================
+from insurance.router import insurance_router
+app.include_router(insurance_router)
+
+@app.post("/api/seed-insurance")
+def seed_insurance():
+    from insurance.seed_data import seed_insurance_data
+    result = seed_insurance_data()
+    return {"status": "seeded", "details": result}
+
 # ==================== RUN SERVER ====================
 
 if __name__ == "__main__":

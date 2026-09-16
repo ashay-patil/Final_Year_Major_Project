@@ -9,6 +9,7 @@ import VitalsMonitor from '../components/VitalsMonitor';
 import VoiceNotes from '../components/VoiceNotes';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import InsurancePortal from '../components/InsurancePortal';
+import InsuranceOpsPortal from '../components/insurance/InsuranceOpsPortal';
 import {
   Volume2, Languages,  ShieldAlert,
  Sparkles, HeartPulse,
@@ -261,6 +262,7 @@ const MainDashboard = ({ onNavigate, onOpenChatbot }) => {
     { name: 'AI Assistant', icon: Brain, action: onOpenChatbot, color: 'from-blue-600 to-indigo-400', shadow: 'hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]', desc: 'Ask questions & get insights' },
     { name: 'Chest X-Ray AI', icon: ScanLine, path: 'xray', color: 'bg-teal-600', desc: 'Grad-CAM explainable diagnosis' },
     { name: 'Insurance Portal', icon: Shield, path: 'insurance', color: 'from-indigo-600 to-violet-400', shadow: 'hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]', desc: 'AI insurance coverage & claims' },
+    { name: 'Insurance Ops', icon: ShieldAlert, path: 'insurance-ops', color: 'from-rose-600 to-orange-400', shadow: 'hover:shadow-[0_0_30px_rgba(244,63,94,0.3)]', desc: 'Cashless claims & HITL review' },
   ];
 
   return (
@@ -1622,6 +1624,7 @@ const AppContent = () => {
       case 'command': return <CommandCenter onNavigateToPatient={(id) => handleNavigateToPatient(id, 'command')} />;
       case 'patient360': return <Patient360 patientId={selectedPatientId} onBack={() => setCurrentView(previousView || 'command')} />;
       case 'aiactivity': return <AIActivityCenter onNavigateToPatient={(id) => handleNavigateToPatient(id, 'aiactivity')} />;
+      case 'insurance-ops': return <InsuranceOpsPortal />;
       default: return <MainDashboard onNavigate={setCurrentView} onOpenChatbot={() => setChatbotOpen(true)} />;
     }
   };
