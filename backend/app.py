@@ -652,10 +652,33 @@ def generate_billing(patient_id: str, data: dict = None):
         {"$set": {
             "status": "billing_completed",
             "bill": bill,
+            "bill_amount": bill["total_amount"],
+            "original_bill_amount": bill.get("original_total") or bill["total_amount"],
             "billing_completed_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
         }}
     )
+    
+    # Synchronize with any active claim so InsuranceOpsPortal reflects the exact same bill
+    try:
+        active_claims = list(db["claims"].find({"patient_id": patient_id, "state": {"$ne": "REJECTED"}}))
+        for ac in active_claims:
+            orig = bill.get("original_total") or bill["total_amount"]
+            final_amt = bill["total_amount"]
+            claim_update = {
+                "bill_amount": final_amt,
+                "final_patient_payable": final_amt,
+                "original_bill_amount": orig,
+                "updated_at": datetime.utcnow()
+            }
+            if insurance_data and insurance_data.get("is_covered"):
+                claim_update["approved_amount"] = insurance_data.get("savings", 0)
+                claim_update["insurance_covered"] = insurance_data.get("savings", 0)
+                claim_update["copay_amount"] = insurance_data.get("copay_amount", 0)
+                claim_update["insurance_data"] = insurance_data
+            db["claims"].update_one({"claim_id": ac["claim_id"]}, {"$set": claim_update})
+    except Exception as e:
+        print(f"Sync claim with generated bill error: {e}")
     
     # Log billing completion
     log_detail = f"Bill generated for patient {patient_id}. Total: ₹{bill['total_amount']:,.2f}"
@@ -1235,6 +1258,16 @@ def recommend_insurance(data: dict):
         print(f"Insurance recommend error: {e}")
         return {"recommendation": f"Unable to generate recommendation: {str(e)}", "all_plans": []}
 
+
+# ==================== INSURANCE CLAIM AUTOMATION ====================
+from insurance.router import insurance_router
+app.include_router(insurance_router)
+
+@app.post("/api/seed-insurance")
+def seed_insurance():
+    from insurance.seed_data import seed_insurance_data
+    result = seed_insurance_data()
+    return {"status": "seeded", "details": result}
 
 # ==================== RUN SERVER ====================
 

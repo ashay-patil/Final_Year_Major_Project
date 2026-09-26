@@ -9,8 +9,18 @@ def calculate_bill(patient):
     nursing_care_per_day = 800  # ₹800 per day
     
     # Calculate days stayed
-    admission_date = datetime.strptime(patient["admission_date"], "%Y-%m-%d")
-    days_stayed = max((datetime.utcnow() - admission_date).days, 1)  # Minimum 1 day
+    if "days_stayed" in patient and patient["days_stayed"]:
+        days_stayed = int(patient["days_stayed"])
+    elif "days_admitted" in patient and patient["days_admitted"]:
+        days_stayed = int(patient["days_admitted"])
+    else:
+        try:
+            admission_date = datetime.strptime(patient["admission_date"], "%Y-%m-%d")
+            days_stayed = max((datetime.utcnow() - admission_date).days, 1)
+            if days_stayed > 30:
+                days_stayed = 5
+        except Exception:
+            days_stayed = 5
 
     # Base charges
     room_charges = room_cost_per_day * days_stayed

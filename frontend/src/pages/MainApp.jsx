@@ -9,6 +9,7 @@ import VitalsMonitor from '../components/VitalsMonitor';
 import VoiceNotes from '../components/VoiceNotes';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import InsurancePortal from '../components/InsurancePortal';
+import InsuranceOpsPortal from '../components/insurance/InsuranceOpsPortal';
 import {
   Volume2, Languages,  ShieldAlert,
  Sparkles, HeartPulse,
@@ -261,6 +262,7 @@ const MainDashboard = ({ onNavigate, onOpenChatbot }) => {
     { name: 'AI Assistant', icon: Brain, action: onOpenChatbot, color: 'from-blue-600 to-indigo-400', shadow: 'hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]', desc: 'Ask questions & get insights' },
     { name: 'Chest X-Ray AI', icon: ScanLine, path: 'xray', color: 'bg-teal-600', desc: 'Grad-CAM explainable diagnosis' },
     { name: 'Insurance Portal', icon: Shield, path: 'insurance', color: 'from-indigo-600 to-violet-400', shadow: 'hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]', desc: 'AI insurance coverage & claims' },
+    { name: 'Insurance Ops', icon: ShieldAlert, path: 'insurance-ops', color: 'from-rose-600 to-orange-400', shadow: 'hover:shadow-[0_0_30px_rgba(244,63,94,0.3)]', desc: 'Cashless claims & HITL review' },
   ];
 
   return (
@@ -1252,7 +1254,28 @@ const BillingPortal = () => {
   const [insuranceCompanies, setInsuranceCompanies] = useState([]);
   const [selectedInsurance, setSelectedInsurance] = useState('');
   const [insuranceResult, setInsuranceResult] = useState(null);
+
+  const [claimStep, setClaimStep] = useState(0); // 0=not started, 1=registered, 2=cashless selected, 3=insurance info, 4=tieup checked
+  const [claimId, setClaimId] = useState(null);
+  const [claimData, setClaimData] = useState({});
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [insurerName, setInsurerName] = useState('');
+  const [policyNumber, setPolicyNumber] = useState('');
+  const [memberId, setMemberId] = useState('');
+  const [uploadDocType, setUploadDocType] = useState('insurance_card');
   const { showToast } = useToast();
+
+  const mapInsurerToCompanyId = (name) => {
+    if (!name) return '';
+    const n = String(name).toLowerCase();
+    if (n.includes('star')) return 'star_health';
+    if (n.includes('hdfc')) return 'hdfc_ergo';
+    if (n.includes('bupa') || n.includes('max')) return 'max_bupa';
+    if (n.includes('icici')) return 'icici_lombard';
+    if (n.includes('bajaj')) return 'bajaj_allianz';
+    if (n.includes('ayushman') || n.includes('pmjay')) return 'ayushman_bharat';
+    return '';
+  };
 
   useEffect(() => {
     fetchPatients();
@@ -1274,6 +1297,12 @@ const BillingPortal = () => {
 
   const handleSelectPatient = async (patient) => {
     setSelectedPatient(patient);
+    setClaimStep(0);
+    setClaimId(null);
+    setClaimData({});
+    setInsurerName('');
+    setPolicyNumber('');
+    setMemberId('');
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/billing/${patient.patient_id}/generate`, {
@@ -1374,6 +1403,487 @@ const BillingPortal = () => {
                   </div>
                   <QRCodeDisplay patientId={selectedPatient.patient_id} patientName={selectedPatient.name} compact={false} />
                 </div>
+
+                {/* Cashless Insurance Claim Flow */}
+                {selectedPatient && (
+                  <div className="mb-6 bg-gradient-to-r from-indigo-900/20 to-violet-900/20 border border-indigo-500/20 rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <ShieldAlert className="w-5 h-5 text-indigo-400" />
+                      <h3 className="font-bold text-white">Cashless Insurance Claim</h3>
+                      {claimStep > 0 && <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-full">Step {claimStep}/7</span>}
+                    </div>
+                    
+                    {claimStep === 0 && (
+                      <button
+                        onClick={async () => {
+                          setClaimLoading(true);
+                          try {
+                            const res = await apiService.insuranceRegister(selectedPatient.patient_id);
+                            setClaimId(res.claim_id);
+                            setClaimData(res);
+                            setClaimStep(1);
+                          } catch (err) { console.error(err); }
+                          setClaimLoading(false);
+                        }}
+                        disabled={claimLoading}
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {claimLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                        Start Cashless Claim
+                      </button>
+                    )}
+                    
+                    {claimStep === 1 && (
+                      <div className="space-y-3">
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-green-300 text-sm flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4" /> Registered! ABHA: {claimData.abha_number}
+                        </div>
+                        <p className="text-gray-400 text-sm">Does the patient want cashless insurance?</p>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={async () => {
+                              setClaimLoading(true);
+                              try {
+                                const res = await apiService.insuranceCashlessSelect(selectedPatient.patient_id, true, claimId);
+                                setClaimData(prev => ({...prev, ...res}));
+                                setClaimStep(2);
+                              } catch (err) { console.error(err); }
+                              setClaimLoading(false);
+                            }}
+                            disabled={claimLoading}
+                            className="flex-1 py-2 bg-green-600 hover:bg-green-500 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+                          >
+                            Yes, Cashless
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setClaimLoading(true);
+                              try {
+                                await apiService.insuranceCashlessSelect(selectedPatient.patient_id, false, claimId);
+                                setClaimStep(0);
+                                setClaimId(null);
+                              } catch (err) { console.error(err); }
+                              setClaimLoading(false);
+                            }}
+                            disabled={claimLoading}
+                            className="flex-1 py-2 bg-white/5 border border-white/10 text-gray-300 rounded-xl font-medium hover:bg-white/10 transition-colors disabled:opacity-50"
+                          >
+                            No, Self-Pay
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {claimStep === 2 && (
+                      <div className="space-y-3">
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-green-300 text-sm flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4" /> Cashless selected!
+                        </div>
+                        <p className="text-gray-400 text-sm">Enter insurance details:</p>
+                        <select
+                          value={insurerName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setInsurerName(val);
+                            const compId = mapInsurerToCompanyId(val);
+                            if (compId) {
+                              setSelectedInsurance(compId);
+                              if (selectedPatient) {
+                                fetch(`${API_BASE_URL}/api/billing/${selectedPatient.patient_id}/generate`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ insurance_company_id: compId })
+                                })
+                                  .then(r => r.json())
+                                  .then(data => {
+                                    setBill(data.bill);
+                                    setInsuranceResult(data.insurance || null);
+                                  })
+                                  .catch(console.error);
+                              }
+                            }
+                          }}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        >
+                          <option value="" className="bg-[#0f172a]">Select Insurer...</option>
+                          <option value="Star Health" className="bg-[#0f172a]">Star Health (Family Health Optima)</option>
+                          <option value="HDFC ERGO" className="bg-[#0f172a]">HDFC ERGO (Optima Secure)</option>
+                          <option value="Niva Bupa" className="bg-[#0f172a]">Niva Bupa (Health Recharge)</option>
+                          <option value="ICICI Lombard" className="bg-[#0f172a]">ICICI Lombard (Health AdvantEdge)</option>
+                          <option value="Bajaj Allianz" className="bg-[#0f172a]">Bajaj Allianz (Health Guard Gold)</option>
+                          <option value="Ayushman Bharat" className="bg-[#0f172a]">Ayushman Bharat (PMJAY)</option>
+                        </select>
+                        <input
+                          value={policyNumber}
+                          onChange={(e) => setPolicyNumber(e.target.value)}
+                          placeholder="Policy Number (e.g. POL-SH-2026-45678)"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        />
+                        <input
+                          value={memberId}
+                          onChange={(e) => setMemberId(e.target.value)}
+                          placeholder="Member ID (e.g. MEM-SH-12345)"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                        />
+                        <button
+                          onClick={async () => {
+                            if (!insurerName || !policyNumber || !memberId) return alert('All fields required');
+                            setClaimLoading(true);
+                            try {
+                              const res = await apiService.insuranceCaptureInfo(claimId, {
+                                insurer_name: insurerName,
+                                policy_number: policyNumber,
+                                member_id: memberId,
+                                policy_type: 'individual'
+                              });
+                              setClaimData(prev => ({...prev, ...res}));
+                              setClaimStep(3);
+                            } catch (err) { console.error(err); }
+                            setClaimLoading(false);
+                          }}
+                          disabled={claimLoading || !insurerName || !policyNumber || !memberId}
+                          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          Submit Insurance Info
+                        </button>
+                      </div>
+                    )}
+                    
+                    {claimStep === 3 && (
+                      <div className="space-y-3">
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-green-300 text-sm flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4" /> Insurance: {insurerName} captured!
+                        </div>
+                        <button
+                          onClick={async () => {
+                            setClaimLoading(true);
+                            try {
+                              const res = await apiService.insuranceTieupStatus(claimId);
+                              setClaimData(prev => ({...prev, ...res, tied_up: true}));
+                              setClaimStep(4);
+                            } catch (err) { console.error(err); }
+                            setClaimLoading(false);
+                          }}
+                          disabled={claimLoading}
+                          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          Check Hospital Tie-up
+                        </button>
+                      </div>
+                    )}
+                    
+                    {claimStep === 4 && (
+                      <div className="space-y-4">
+                        {claimData.tied_up !== false ? (
+                          <div className="space-y-4">
+                            <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-green-300 text-sm flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4" /> Hospital Tie-up confirmed for {insurerName || 'network insurer'}! Upload verification documents.
+                            </div>
+                            
+                            {/* Document Type Selector & Dedicated Upload Area */}
+                            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-4">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+                                <div>
+                                  <h4 className="font-semibold text-white text-sm">Upload Required Documents</h4>
+                                  <p className="text-gray-400 text-xs mt-0.5">Select document slot or pick type before uploading to avoid tagging all as insurance card</p>
+                                </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                  <label className="text-xs text-indigo-300 font-medium whitespace-nowrap">Upload Type:</label>
+                                  <select
+                                    value={uploadDocType}
+                                    onChange={(e) => setUploadDocType(e.target.value)}
+                                    className="bg-[#0a0e1a] border border-indigo-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-400 flex-1 sm:flex-none"
+                                  >
+                                    <option value="insurance_card">💳 Insurance Card / E-Card</option>
+                                    <option value="id_proof">🆔 Patient ID Proof (Aadhaar/Govt)</option>
+                                    <option value="prescription">📋 Doctor Prescription</option>
+                                    <option value="discharge_summary">📄 Discharge Summary</option>
+                                    <option value="lab_report">🧪 Diagnostic / Lab Report</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* 4 Required Document Slots */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {[
+                                  { type: 'insurance_card', title: 'Insurance Card', icon: '💳', desc: 'Policy card or digital member ID' },
+                                  { type: 'id_proof', title: 'ID Proof (Aadhaar/Govt)', icon: '🆔', desc: 'Patient identity proof' },
+                                  { type: 'prescription', title: 'Doctor Prescription', icon: '📋', desc: 'Admission / Rx medication order' },
+                                  { type: 'discharge_summary', title: 'Discharge Summary', icon: '📄', desc: 'Clinical notes & treatment record' },
+                                ].map((slot) => {
+                                  const uploaded = (claimData.uploadedDocs || []).find(d => d.type === slot.type || d.doc_type === slot.type);
+                                  return (
+                                    <div 
+                                      key={slot.type}
+                                      className={`p-3 rounded-xl border transition-all ${
+                                        uploaded 
+                                          ? 'bg-emerald-500/10 border-emerald-500/30' 
+                                          : 'bg-white/5 border-white/10 hover:border-indigo-500/30'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-base">{slot.icon}</span>
+                                          <span className="font-medium text-white text-xs">{slot.title}</span>
+                                        </div>
+                                        {uploaded ? (
+                                          <span className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                                            <CheckCircle className="w-3.5 h-3.5" /> Uploaded
+                                          </span>
+                                        ) : (
+                                          <span className="text-amber-400 text-xs">Required</span>
+                                        )}
+                                      </div>
+                                      
+                                      <p className="text-gray-400 text-[11px] mb-2 truncate">{uploaded ? (uploaded.name || uploaded.filename) : slot.desc}</p>
+                                      
+                                      <label className="block">
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          onChange={async (e) => {
+                                            if (e.target.files && e.target.files[0]) {
+                                              const file = e.target.files[0];
+                                              setClaimLoading(true);
+                                              try {
+                                                const res = await apiService.insuranceUploadDoc(claimId, file, slot.type);
+                                                setClaimData(prev => {
+                                                  const existing = (prev.uploadedDocs || []).filter(d => d.type !== slot.type && d.doc_type !== slot.type);
+                                                  return {
+                                                    ...prev,
+                                                    uploadedDocs: [...existing, { name: file.name, type: slot.type, ...res }]
+                                                  };
+                                                });
+                                                showToast(`${slot.title} uploaded successfully!`, 'success');
+                                              } catch (err) {
+                                                console.error(err);
+                                                showToast(`Failed to upload ${slot.title}`, 'error');
+                                              }
+                                              setClaimLoading(false);
+                                            }
+                                          }}
+                                        />
+                                        <span className={`w-full py-1.5 px-3 rounded-lg text-xs font-medium cursor-pointer flex items-center justify-center gap-1.5 transition-colors ${
+                                          uploaded 
+                                            ? 'bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/30' 
+                                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                        }`}>
+                                          <Upload className="w-3 h-3" /> {uploaded ? 'Replace Document' : `Upload ${slot.title}`}
+                                        </span>
+                                      </label>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Quick File Upload with active document type */}
+                              <div className="pt-2 border-t border-white/5">
+                                <label className="block text-xs text-gray-400 mb-1">
+                                  Or browse file to upload as <span className="text-indigo-300 font-semibold">{uploadDocType.replace(/_/g, ' ')}</span>:
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={async (e) => {
+                                    if (e.target.files && e.target.files[0]) {
+                                      const file = e.target.files[0];
+                                      setClaimLoading(true);
+                                      try {
+                                        const res = await apiService.insuranceUploadDoc(claimId, file, uploadDocType);
+                                        setClaimData(prev => {
+                                          const existing = (prev.uploadedDocs || []).filter(d => d.type !== uploadDocType && d.doc_type !== uploadDocType);
+                                          return {
+                                            ...prev,
+                                            uploadedDocs: [...existing, { name: file.name, type: uploadDocType, ...res }]
+                                          };
+                                        });
+                                        showToast(`Uploaded as ${uploadDocType.replace(/_/g, ' ')}!`, 'success');
+                                        const types = ['insurance_card', 'id_proof', 'prescription', 'discharge_summary'];
+                                        const nextIdx = (types.indexOf(uploadDocType) + 1) % types.length;
+                                        setUploadDocType(types[nextIdx]);
+                                      } catch (err) {
+                                        console.error(err);
+                                        showToast('Failed to upload document', 'error');
+                                      }
+                                      setClaimLoading(false);
+                                    }
+                                  }}
+                                  className="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Uploaded Documents List */}
+                            {(claimData.uploadedDocs || []).length > 0 && (
+                              <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-1.5">
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Uploaded Files ({(claimData.uploadedDocs || []).length}):</span>
+                                {(claimData.uploadedDocs || []).map((doc, i) => (
+                                  <div key={i} className="flex items-center justify-between bg-black/20 border border-white/5 rounded-lg px-3 py-1.5 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span className="text-white font-medium">{doc.name || doc.filename}</span>
+                                    </div>
+                                    <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded font-mono text-[11px] capitalize">
+                                      {(doc.type || doc.doc_type || 'Document').replace(/_/g, ' ')}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            <button
+                              onClick={async () => {
+                                setClaimLoading(true);
+                                try {
+                                  const res = await apiService.insuranceSubmitForReview(claimId);
+                                  setClaimData(prev => ({...prev, ...res}));
+                                  setClaimStep(5);
+                                  showToast('Claim submitted for HITL review!', 'success');
+                                } catch (err) { 
+                                  console.error(err); 
+                                  showToast('Failed to submit claim for review', 'error');
+                                }
+                                setClaimLoading(false);
+                              }}
+                              disabled={claimLoading}
+                              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              {claimLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                              Submit for HITL Review
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
+                            <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+                            <p className="text-red-300 font-semibold">Cashless Claim Failed</p>
+                            <p className="text-red-400/70 text-sm mt-1">{insurerName} is not tied up with this hospital. Patient will need to do cash payment and offline insurance confirmation.</p>
+                            <button
+                              onClick={() => { setClaimStep(0); setClaimId(null); setClaimData({}); }}
+                              className="mt-3 px-4 py-2 bg-white/5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/10"
+                            >
+                              Reset
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {claimStep === 5 && (
+                      <div className="space-y-3">
+                        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 text-center">
+                          <Shield className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
+                          <p className="text-indigo-300 font-semibold">Claim Submitted for HITL Review!</p>
+                          <p className="text-gray-400 text-sm mt-1">Claim ID: {claimId}</p>
+                          <div className="mt-3 p-3 bg-white/5 rounded-xl border border-white/10 max-w-sm mx-auto text-left space-y-1.5 text-xs">
+                            <div className="flex justify-between text-gray-400">
+                              <span>Insurer:</span>
+                              <span className="text-white font-medium">{insurerName}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-400">
+                              <span>Original Total Billed:</span>
+                              <span className="text-white font-mono">₹{(bill?.original_total || bill?.total_amount || claimData.original_bill_amount || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-indigo-300">
+                              <span>Insurance Concession:</span>
+                              <span className="font-mono">₹{(insuranceResult?.savings || claimData.insurance_covered || claimData.approved_amount || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="h-px bg-white/10 my-1"></div>
+                            <div className="flex justify-between text-emerald-400 font-bold text-sm">
+                              <span>Final Patient Payable:</span>
+                              <span className="font-mono">₹{(claimData.bill_amount || claimData.final_patient_payable || bill?.total_amount || 0).toLocaleString()}</span>
+                            </div>
+                          </div>
+                          <p className="text-gray-500 text-xs mt-3">Navigate to Insurance Ops portal to review & approve this claim.</p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            // Check current state
+                            try {
+                              const res = await apiService.insuranceGetClaim(claimId);
+                              const state = res.state || res.claim?.state;
+                              setClaimData(prev => ({...prev, currentState: state, claimDetails: res}));
+                              if (state === 'PAYMENT_PENDING' || state === 'PENDING') {
+                                setClaimStep(6);
+                              } else if (state === 'COMPLETED' || state === 'PAYMENT_RECEIVED') {
+                                setClaimStep(7);
+                              } else if (state === 'REJECTED') {
+                                setClaimStep(8);
+                              }
+                            } catch (err) { console.error(err); }
+                          }}
+                          className="w-full py-2 bg-white/5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/10"
+                        >
+                          Refresh Claim Status
+                        </button>
+                      </div>
+                    )}
+                    
+                    {claimStep === 6 && (
+                      <div className="space-y-3">
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
+                          <DollarSign className="w-8 h-8 text-amber-400 mx-auto mb-2" />
+                          <p className="text-amber-300 font-semibold">Payment Pending</p>
+                          <p className="text-gray-400 text-sm mt-1">Insurer has approved the claim. Awaiting payment confirmation.</p>
+                          {claimData.claimDetails && (
+                            <div className="mt-3 p-3 bg-white/5 rounded-xl border border-white/10 max-w-sm mx-auto text-left space-y-1.5 text-xs">
+                              <div className="flex justify-between text-gray-400">
+                                <span>Original Hospital Bill:</span>
+                                <span className="text-white font-mono">₹{(claimData.claimDetails.original_bill_amount || claimData.claimDetails.amounts?.total_billed || bill?.original_total || bill?.total_amount || 0).toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between text-green-400">
+                                <span>Approved by Insurer:</span>
+                                <span className="font-mono">₹{(claimData.claimDetails.insurance_covered || claimData.claimDetails.approved_amount || claimData.claimDetails.amounts?.approved_amount || 0).toLocaleString()}</span>
+                              </div>
+                              <div className="h-px bg-white/10 my-1"></div>
+                              <div className="flex justify-between text-amber-300 font-bold text-sm">
+                                <span>Final Patient Payable:</span>
+                                <span className="font-mono">₹{(claimData.claimDetails.final_patient_payable || claimData.claimDetails.bill_amount || claimData.claimDetails.amounts?.final_patient_payable || bill?.total_amount || 0).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            setClaimLoading(true);
+                            try {
+                              const approvedAmt = claimData.claimDetails?.insurance_covered || claimData.claimDetails?.approved_amount || claimData.claimDetails?.amounts?.approved_amount || 0;
+                              await apiService.insuranceMarkPayment(claimId, approvedAmt, 'TXN-' + Date.now());
+                              setClaimStep(7);
+                            } catch (err) { console.error(err); }
+                            setClaimLoading(false);
+                          }}
+                          disabled={claimLoading}
+                          className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {claimLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                          Mark Payment Received
+                        </button>
+                      </div>
+                    )}
+                    
+                    {claimStep === 7 && (
+                      <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
+                        <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-2" />
+                        <p className="text-green-300 font-bold text-lg">Cashless Claim Complete!</p>
+                        <p className="text-green-400/70 text-sm mt-1">Insurance payment received. Generate the final bill below with the insurance concession applied.</p>
+                        <p className="text-gray-500 text-xs mt-2">Claim ID: {claimId}</p>
+                      </div>
+                    )}
+                    
+                    {claimStep === 8 && (
+                      <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
+                        <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+                        <p className="text-red-300 font-semibold">Cashless Claim Rejected</p>
+                        <p className="text-red-400/70 text-sm mt-1">The HITL reviewer rejected this claim. Patient will need to pay cash and process insurance reimbursement offline.</p>
+                        <button
+                          onClick={() => { setClaimStep(0); setClaimId(null); setClaimData({}); }}
+                          className="mt-3 px-4 py-2 bg-white/5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/10"
+                        >
+                          Reset & Generate Cash Bill
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {loading ? (
                   <div className="text-center py-20 flex flex-col items-center">
@@ -1622,6 +2132,7 @@ const AppContent = () => {
       case 'command': return <CommandCenter onNavigateToPatient={(id) => handleNavigateToPatient(id, 'command')} />;
       case 'patient360': return <Patient360 patientId={selectedPatientId} onBack={() => setCurrentView(previousView || 'command')} />;
       case 'aiactivity': return <AIActivityCenter onNavigateToPatient={(id) => handleNavigateToPatient(id, 'aiactivity')} />;
+      case 'insurance-ops': return <InsuranceOpsPortal />;
       default: return <MainDashboard onNavigate={setCurrentView} onOpenChatbot={() => setChatbotOpen(true)} />;
     }
   };
