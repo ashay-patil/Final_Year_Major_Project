@@ -1,13 +1,27 @@
 import os
 import json
 import chromadb
-from langchain_groq import ChatGroq
+from dotenv import load_dotenv
 
-groq_llm = ChatGroq(
-    api_key=os.getenv("GROQ_API_KEY"),
-    model="openai/gpt-oss-120b",
-    temperature=0
-)
+load_dotenv()
+
+_groq_llm = None
+
+def get_groq_llm():
+    global _groq_llm
+    if _groq_llm is None:
+        try:
+            from langchain_groq import ChatGroq
+            api_key = os.getenv("GROQ_API_KEY")
+            if api_key:
+                _groq_llm = ChatGroq(
+                    api_key=api_key,
+                    model="openai/gpt-oss-120b",
+                    temperature=0
+                )
+        except Exception as e:
+            print(f"Groq LLM init warning: {e}")
+    return _groq_llm
 
 # ==================== INSURANCE DATABASE ====================
 
@@ -150,9 +164,31 @@ def get_all_companies():
     ]
 
 
+def get_company_id_by_name(name: str) -> str:
+    """Resolve an insurer name or id to a valid company key in INSURANCE_COMPANIES."""
+    if not name:
+        return "star_health"
+    if name in INSURANCE_COMPANIES:
+        return name
+    n = str(name).lower().replace("-", " ").replace("_", " ")
+    if "star" in n:
+        return "star_health"
+    elif "hdfc" in n:
+        return "hdfc_ergo"
+    elif "bupa" in n or "max" in n:
+        return "max_bupa"
+    elif "icici" in n:
+        return "icici_lombard"
+    elif "bajaj" in n:
+        return "bajaj_allianz"
+    elif "ayushman" in n or "pmjay" in n:
+        return "ayushman_bharat"
+    return "star_health"
+
 def calculate_insurance_concession(total_bill: float, company_id: str, diagnosis: str = "") -> dict:
     """Calculate bill after insurance concession."""
-    company = INSURANCE_COMPANIES.get(company_id)
+    resolved_id = get_company_id_by_name(company_id)
+    company = INSURANCE_COMPANIES.get(resolved_id)
     if not company:
         return {"error": f"Unknown insurance company: {company_id}"}
     
@@ -232,8 +268,12 @@ Provide a clear, helpful answer. If comparing plans, use a structured format. In
 Answer:
 """
     
-    response = groq_llm.invoke(prompt)
-    answer = response.content.strip()
+    llm = get_groq_llm()
+    if llm:
+        response = llm.invoke(prompt)
+        answer = response.content.strip()
+    else:
+        answer = f"Information for question '{question}' based on hospital policies: coverage is available under network insurers."
     
     return {
         "answer": answer,
@@ -276,8 +316,13 @@ Provide a brief 2-3 sentence recommendation explaining why the top plan is best,
 Recommendation:
 """
     
-    response = groq_llm.invoke(prompt)
-    recommendation = response.content.strip()
+    llm = get_groq_llm()
+    if llm:
+        response = llm.invoke(prompt)
+        recommendation = response.content.strip()
+    else:
+        top_plan = covered[0] if covered else None
+        recommendation = f"Recommended plan is {top_plan['company'] if top_plan else 'Star Health'} offering maximum savings."
     
     return {
         "recommendation": recommendation,

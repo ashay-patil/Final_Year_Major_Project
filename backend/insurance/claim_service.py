@@ -26,8 +26,17 @@ def get_claim(claim_id):
 def get_all_claims():
     claims = list(db["claims"].find({}, {"_id": 0}))
     for c in claims:
+        orig_billed = c.get("original_bill_amount") or c.get("bill_amount", 0)
+        final_payable = c.get("final_patient_payable") or c.get("bill_amount", 0)
+        coverage = c.get("insurance_covered") or c.get("approved_amount", 0)
+        c["bill_amount"] = final_payable
+        c["final_patient_payable"] = final_payable
         c["amounts"] = {
-            "total_billed": c.get("bill_amount", 0),
+            "total_billed": orig_billed,
+            "original_billed": orig_billed,
+            "final_patient_payable": final_payable,
+            "patient_payable": final_payable,
+            "estimated_coverage": coverage,
             "approved_amount": c.get("approved_amount", 0),
             "received_amount": c.get("received_amount", 0),
         }
@@ -62,23 +71,23 @@ def transition_state(claim_id, new_state, actor, reason=""):
     write_audit_event(claim_id, actor, event_name, metadata={"from": old_state, "to": new_state, "reason": reason})
     return True
 
-def calculate_amounts(claim_id, approved_amount=0, received_amount=0):
+def calculate_amounts(claim_id, approved_amount=None, received_amount=None):
     claim = db["claims"].find_one({"claim_id": claim_id})
     if not claim:
         raise ValueError("Claim not found")
         
-    new_approved = claim.get("approved_amount", 0) + float(approved_amount)
-    new_received = claim.get("received_amount", 0) + float(received_amount)
+    set_fields = {"updated_at": datetime.utcnow()}
+    if approved_amount is not None:
+        set_fields["approved_amount"] = float(approved_amount)
+    if received_amount is not None:
+        new_received = claim.get("received_amount", 0) + float(received_amount)
+        set_fields["received_amount"] = new_received
     
     db["claims"].update_one(
         {"claim_id": claim_id},
-        {"$set": {
-            "approved_amount": new_approved,
-            "received_amount": new_received,
-            "updated_at": datetime.utcnow()
-        }}
+        {"$set": set_fields}
     )
-    return {"approved_amount": new_approved, "received_amount": new_received}
+    return set_fields
 
 def get_review_payload(claim_id):
     claim = get_claim(claim_id)
@@ -110,6 +119,10 @@ def get_review_payload(claim_id):
     from insurance.audit import audit_events_collection
     audit = list(audit_events_collection.find({"claim_id": claim_id}, {"_id": 0}).sort("timestamp", 1))
     
+    orig_billed = claim.get("original_bill_amount") or claim.get("bill_amount", 0)
+    final_payable = claim.get("final_patient_payable") or claim.get("bill_amount", 0)
+    coverage = claim.get("insurance_covered") or claim.get("approved_amount", 0) or max(0, orig_billed - final_payable)
+    
     return {
         "claim_id": claim_id,
         "claim": claim,
@@ -119,15 +132,17 @@ def get_review_payload(claim_id):
         "documents": docs,
         "missing_docs": missing_docs,
         "amounts": {
-            "bill_amount": claim.get("bill_amount", 0),
-            "total_billed": claim.get("bill_amount", 0),  # alias for frontend
-            "approved_amount": claim.get("approved_amount", 0),
-            "estimated_coverage": claim.get("approved_amount", 0) or claim.get("bill_amount", 0) * 0.9,  # estimate if not yet approved
+            "bill_amount": final_payable,
+            "total_billed": orig_billed,
+            "original_billed": orig_billed,
+            "final_patient_payable": final_payable,
+            "patient_payable": final_payable,
+            "approved_amount": claim.get("approved_amount", 0) or coverage,
+            "estimated_coverage": coverage,
             "received_amount": claim.get("received_amount", 0),
-            "patient_payable": max(0, claim.get("bill_amount", 0) - (claim.get("approved_amount", 0) or claim.get("bill_amount", 0) * 0.9)),
         },
         "channel": claim.get("channel", "hcx"),
-        "verification_status": insurer.get("verification_status", "verified") if insurer else "unknown",
+        "verification_status": insurer.get("verification_status", "verified") if insurer else "verified",
         "policy_findings": claim.get("policy_findings", ""),
         "history": history,
         "audit_events": audit,
@@ -140,13 +155,22 @@ def get_pending_reviews():
     for claim in claims:
         patient = db["patients"].find_one({"patient_id": claim.get("patient_id")}, {"_id": 0})
         policy = db["insurance_policies_v2"].find_one({"patient_id": claim.get("patient_id")}, {"_id": 0})
+        orig_billed = claim.get("original_bill_amount") or claim.get("bill_amount", 0)
+        final_payable = claim.get("final_patient_payable") or claim.get("bill_amount", 0)
+        coverage = claim.get("insurance_covered") or claim.get("approved_amount", 0) or max(0, orig_billed - final_payable)
         enriched.append({
             **claim,
             "patient": patient or {},
             "insurance": policy or {"insurer_name": claim.get("insurer_name", "")},
+            "bill_amount": final_payable,
+            "final_patient_payable": final_payable,
             "amounts": {
-                "total_billed": claim.get("bill_amount", 0),
-                "approved_amount": claim.get("approved_amount", 0),
+                "total_billed": orig_billed,
+                "original_billed": orig_billed,
+                "final_patient_payable": final_payable,
+                "patient_payable": final_payable,
+                "estimated_coverage": coverage,
+                "approved_amount": claim.get("approved_amount", 0) or coverage,
             },
             "channel": claim.get("channel", "hcx"),
         })

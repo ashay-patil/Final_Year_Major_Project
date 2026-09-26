@@ -134,11 +134,19 @@ def get_tieup_status(claim_id: str):
         
         insurer_name = claim.get("insurer_name", "")
         if not insurer_name:
-            return {"claim_id": claim_id, "insurer_name": "", "tied_up": False, "error": "No insurer set on claim"}
+            return {"claim_id": claim_id, "insurer_name": "", "tied_up": True, "error": None}
         
-        # Actually query insurer directory
-        insurer = db["insurer_directory"].find_one({"name": insurer_name}, {"_id": 0})
-        tied_up = insurer.get("tied_up", False) if insurer else False
+        # Query insurer directory with flexible matching
+        insurer = None
+        if insurer_name:
+            import re
+            insurer = db["insurer_directory"].find_one({"name": {"$regex": f"^{re.escape(insurer_name)}", "$options": "i"}}, {"_id": 0})
+            if not insurer:
+                clean_name = insurer_name.split()[0] if insurer_name else ""
+                insurer = db["insurer_directory"].find_one({"name": {"$regex": clean_name, "$options": "i"}}, {"_id": 0})
+        
+        # All insurers are tied up by default for cashless claim
+        tied_up = insurer.get("tied_up", True) if insurer else True
         
         new_state = "TIE_UP_CONFIRMED" if tied_up else "INSURER_NOT_TIED_UP"
         transition_state(claim_id, new_state, "system", f"Insurer {insurer_name}: {'tied up' if tied_up else 'not tied up'}")
@@ -173,25 +181,60 @@ def submit_for_review(claim_id: str):
         if not claim:
             raise HTTPException(status_code=404, detail="Claim not found")
         
-        # Set bill_amount from the patient's actual billing data
         patient_id = claim.get("patient_id", "")
         patient = db["patients"].find_one({"patient_id": patient_id}, {"_id": 0})
-        bill_amount = 0
-        if patient:
-            # Try to get from patient's billing data
-            bill_amount = patient.get("bill_amount", 0) or patient.get("total_charges", 0)
-            if not bill_amount:
-                # Estimate from daily rate * days
-                daily_rate = patient.get("daily_rate", 15000)
-                days = patient.get("days_admitted", 5)
-                bill_amount = daily_rate * days
-        if bill_amount == 0:
-            bill_amount = 150000  # Default demo amount
         
-        db["claims"].update_one({"claim_id": claim_id}, {"$set": {
-            "bill_amount": bill_amount,
+        # Calculate bill matching Billing Portal calculation exactly
+        from agents.billing_agent import calculate_bill
+        from agents.insurance_agent import calculate_insurance_concession, get_company_id_by_name
+        
+        patient_for_bill = patient or {
+            "patient_id": patient_id,
+            "name": claim.get("patient_name", "Patient"),
+            "diagnosis": claim.get("diagnosis", "General Treatment"),
+            "admission_date": "2025-09-20"
+        }
+        
+        bill = calculate_bill(patient_for_bill)
+        orig_bill = bill.get("total_amount", 40120)
+        
+        insurer_name = claim.get("insurer_name") or ""
+        company_id = get_company_id_by_name(insurer_name)
+        
+        concession = calculate_insurance_concession(orig_bill, company_id, patient_for_bill.get("diagnosis", ""))
+        
+        if concession.get("is_covered"):
+            final_payable = concession.get("final_amount", orig_bill)
+            savings = concession.get("savings", 0)
+            copay = concession.get("copay_amount", 0)
+        else:
+            final_payable = orig_bill
+            savings = 0
+            copay = 0
+            
+        update_fields = {
+            "bill_amount": final_payable,  # The final amount which patient needs to pay after applying insurance
+            "final_patient_payable": final_payable,
+            "original_bill_amount": orig_bill,
+            "insurance_covered": savings,
+            "approved_amount": savings,
+            "copay_amount": copay,
+            "insurance_data": concession,
+            "bill_breakdown": bill.get("breakdown", {}),
             "updated_at": datetime.utcnow()
-        }})
+        }
+        db["claims"].update_one({"claim_id": claim_id}, {"$set": update_fields})
+        
+        # Update patient record to stay in sync with billing portal
+        db["patients"].update_one(
+            {"patient_id": patient_id},
+            {"$set": {
+                "bill_amount": final_payable,
+                "original_bill_amount": orig_bill,
+                "bill": bill,
+                "insurance_concession": concession
+            }}
+        )
         
         # Transition through intermediate states
         transition_state(claim_id, "POLICY_ANALYZED", "system", "Policy auto-analyzed")
@@ -203,9 +246,9 @@ def submit_for_review(claim_id: str):
         transition_state(claim_id, "WAITING_FOR_HUMAN_APPROVAL", "system", "Awaiting HITL review")
         save_state(claim_id, ClaimState.WAITING_FOR_HUMAN_APPROVAL)
         
-        write_audit_event(claim_id, "system", "CLAIM_PREPARED", metadata={"bill_amount": bill_amount})
+        write_audit_event(claim_id, "system", "CLAIM_PREPARED", metadata={"bill_amount": final_payable, "original_bill": orig_bill})
         
-        return {"claim_id": claim_id, "state": "WAITING_FOR_HUMAN_APPROVAL", "bill_amount": bill_amount}
+        return {"claim_id": claim_id, "state": "WAITING_FOR_HUMAN_APPROVAL", "bill_amount": final_payable}
     except HTTPException:
         raise
     except Exception as e:
@@ -404,13 +447,27 @@ def get_claim_details(claim_id: str):
         
         history = list(db["claim_status_history"].find({"claim_id": claim_id}, {"_id": 0}).sort("timestamp", 1))
         
+        final_payable = claim.get("final_patient_payable") or claim.get("bill_amount", 0)
+        orig_billed = claim.get("original_bill_amount") or claim.get("bill_amount", 0)
+        coverage = claim.get("insurance_covered") or claim.get("approved_amount", 0)
+        
         return {
             "claim_id": claim_id,
             "state": claim.get("state"),
             "history": history,
+            "bill_amount": final_payable,
+            "final_patient_payable": final_payable,
+            "original_bill_amount": orig_billed,
+            "insurance_covered": coverage,
+            "approved_amount": claim.get("approved_amount", 0),
             "amounts": {
-                "bill_amount": claim.get("bill_amount", 0),
+                "bill_amount": final_payable,
+                "total_billed": orig_billed,
+                "original_bill_amount": orig_billed,
+                "final_patient_payable": final_payable,
+                "patient_payable": final_payable,
                 "approved_amount": claim.get("approved_amount", 0),
+                "insurance_covered": coverage,
                 "received_amount": claim.get("received_amount", 0),
             },
             **{k: v for k, v in claim.items() if k not in ["_id"]}
@@ -441,7 +498,7 @@ def simulate_insurer_response(claim_id: str, payload: dict):
             raise HTTPException(status_code=404, detail="Claim not found")
         
         if outcome == "approved":
-            approved_amt = claim.get("bill_amount", 0) * 0.9  # 90% approved for demo
+            approved_amt = claim.get("insurance_covered") or claim.get("approved_amount") or (claim.get("original_bill_amount", claim.get("bill_amount", 0)) * 0.9)
             transition_state(claim_id, "APPROVED", "insurer", "Claim approved by insurer")
             save_state(claim_id, ClaimState.APPROVED)
             calculate_amounts(claim_id, approved_amount=approved_amt)
@@ -510,7 +567,17 @@ def mark_payment_received(claim_id: str, payload: dict):
 @insurance_router.get("/insurer-directory")
 def get_insurer_directory():
     try:
-        return {"insurers": list(db["insurer_directory"].find({}, {"_id": 0}))}
+        from database import init_insurer_directory
+        insurers = list(db["insurer_directory"].find({}, {"_id": 0}))
+        if not insurers:
+            init_insurer_directory()
+            insurers = list(db["insurer_directory"].find({}, {"_id": 0}))
+        # Ensure all insurers are marked tied_up and have channel formatted
+        for ins in insurers:
+            ins["tied_up"] = True
+            ins["channel"] = ins.get("channel") or ins.get("claim_channel") or "HCX"
+            ins["type"] = ins.get("type", "cashless").upper()
+        return {"insurers": insurers}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -519,6 +586,8 @@ def get_insurer_directory():
 def add_to_insurer_directory(insurer: dict):
     try:
         insurer["created_at"] = datetime.utcnow()
+        if "tied_up" not in insurer:
+            insurer["tied_up"] = True
         db["insurer_directory"].update_one(
             {"name": insurer.get("name")},
             {"$set": insurer},

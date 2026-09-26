@@ -170,14 +170,28 @@ const InsuranceOpsPortal = () => {
                         </p>
 
                         <div className="space-y-2 mb-6">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Est. Billed</span>
-                            <span className="text-white">
-                              ₹
-                              {review.amounts?.total_billed?.toLocaleString() ||
-                                0}
+                          <div className="flex justify-between text-sm items-center">
+                            <span className="text-gray-300 font-medium">Final Patient Payable</span>
+                            <span className="text-emerald-400 font-bold text-base">
+                              ₹{(review.amounts?.final_patient_payable ?? review.amounts?.patient_payable ?? review.bill_amount ?? 0).toLocaleString()}
                             </span>
                           </div>
+                          {review.amounts?.total_billed && review.amounts.total_billed !== (review.amounts?.final_patient_payable ?? review.bill_amount) && (
+                            <div className="flex justify-between text-xs text-gray-400">
+                              <span>Original Billed</span>
+                              <span className="line-through text-gray-500 font-mono">
+                                ₹{review.amounts.total_billed.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                          {review.amounts?.estimated_coverage > 0 && (
+                            <div className="flex justify-between text-xs text-indigo-300">
+                              <span>Insurance Coverage</span>
+                              <span className="font-mono">
+                                ₹{review.amounts.estimated_coverage.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-400">Channel</span>
                             <span className="text-white">
@@ -250,7 +264,14 @@ const InsuranceOpsPortal = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 font-medium">
-                            ₹{(claim.bill_amount || claim.amounts?.total_billed || 0).toLocaleString()}
+                            <div className="text-white font-semibold">
+                              ₹{(claim.final_patient_payable || claim.bill_amount || claim.amounts?.final_patient_payable || claim.amounts?.patient_payable || 0).toLocaleString()}
+                            </div>
+                            {claim.amounts?.total_billed && claim.amounts.total_billed !== (claim.final_patient_payable || claim.bill_amount) && (
+                              <div className="text-xs text-gray-500 line-through">
+                                ₹{claim.amounts.total_billed.toLocaleString()}
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-right">
                             {claim.state === "PENDING" && (

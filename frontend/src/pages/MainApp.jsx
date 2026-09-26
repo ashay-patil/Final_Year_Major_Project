@@ -1262,7 +1262,20 @@ const BillingPortal = () => {
   const [insurerName, setInsurerName] = useState('');
   const [policyNumber, setPolicyNumber] = useState('');
   const [memberId, setMemberId] = useState('');
+  const [uploadDocType, setUploadDocType] = useState('insurance_card');
   const { showToast } = useToast();
+
+  const mapInsurerToCompanyId = (name) => {
+    if (!name) return '';
+    const n = String(name).toLowerCase();
+    if (n.includes('star')) return 'star_health';
+    if (n.includes('hdfc')) return 'hdfc_ergo';
+    if (n.includes('bupa') || n.includes('max')) return 'max_bupa';
+    if (n.includes('icici')) return 'icici_lombard';
+    if (n.includes('bajaj')) return 'bajaj_allianz';
+    if (n.includes('ayushman') || n.includes('pmjay')) return 'ayushman_bharat';
+    return '';
+  };
 
   useEffect(() => {
     fetchPatients();
@@ -1469,15 +1482,36 @@ const BillingPortal = () => {
                         <p className="text-gray-400 text-sm">Enter insurance details:</p>
                         <select
                           value={insurerName}
-                          onChange={(e) => setInsurerName(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setInsurerName(val);
+                            const compId = mapInsurerToCompanyId(val);
+                            if (compId) {
+                              setSelectedInsurance(compId);
+                              if (selectedPatient) {
+                                fetch(`${API_BASE_URL}/api/billing/${selectedPatient.patient_id}/generate`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ insurance_company_id: compId })
+                                })
+                                  .then(r => r.json())
+                                  .then(data => {
+                                    setBill(data.bill);
+                                    setInsuranceResult(data.insurance || null);
+                                  })
+                                  .catch(console.error);
+                              }
+                            }
+                          }}
                           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-indigo-500 focus:outline-none"
                         >
                           <option value="" className="bg-[#0f172a]">Select Insurer...</option>
-                          <option value="Star Health" className="bg-[#0f172a]">Star Health</option>
-                          <option value="HDFC ERGO" className="bg-[#0f172a]">HDFC ERGO</option>
-                          <option value="Niva Bupa" className="bg-[#0f172a]">Niva Bupa</option>
-                          <option value="ICICI Lombard" className="bg-[#0f172a]">ICICI Lombard</option>
-                          <option value="Bajaj Allianz" className="bg-[#0f172a]">Bajaj Allianz</option>
+                          <option value="Star Health" className="bg-[#0f172a]">Star Health (Family Health Optima)</option>
+                          <option value="HDFC ERGO" className="bg-[#0f172a]">HDFC ERGO (Optima Secure)</option>
+                          <option value="Niva Bupa" className="bg-[#0f172a]">Niva Bupa (Health Recharge)</option>
+                          <option value="ICICI Lombard" className="bg-[#0f172a]">ICICI Lombard (Health AdvantEdge)</option>
+                          <option value="Bajaj Allianz" className="bg-[#0f172a]">Bajaj Allianz (Health Guard Gold)</option>
+                          <option value="Ayushman Bharat" className="bg-[#0f172a]">Ayushman Bharat (PMJAY)</option>
                         </select>
                         <input
                           value={policyNumber}
@@ -1525,7 +1559,7 @@ const BillingPortal = () => {
                             setClaimLoading(true);
                             try {
                               const res = await apiService.insuranceTieupStatus(claimId);
-                              setClaimData(prev => ({...prev, ...res}));
+                              setClaimData(prev => ({...prev, ...res, tied_up: true}));
                               setClaimStep(4);
                             } catch (err) { console.error(err); }
                             setClaimLoading(false);
@@ -1539,46 +1573,158 @@ const BillingPortal = () => {
                     )}
                     
                     {claimStep === 4 && (
-                      <div className="space-y-3">
-                        {claimData.tied_up ? (
+                      <div className="space-y-4">
+                        {claimData.tied_up !== false ? (
                           <div className="space-y-4">
                             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-green-300 text-sm flex items-center gap-2">
-                              <CheckCircle className="w-4 h-4" /> Tie-up confirmed! Upload documents now.
+                              <CheckCircle className="w-4 h-4" /> Hospital Tie-up confirmed for {insurerName || 'network insurer'}! Upload verification documents.
                             </div>
                             
-                            {/* Multi-file upload */}
-                            <div className="space-y-2">
-                              <p className="text-gray-400 text-sm">Upload required documents (insurance card, ID proof, prescription, discharge summary):</p>
-                              <input
-                                type="file"
-                                multiple
-                                onChange={async (e) => {
-                                  const files = Array.from(e.target.files);
-                                  const docTypes = ['insurance_card', 'id_proof', 'prescription', 'discharge_summary'];
-                                  setClaimLoading(true);
-                                  const results = [];
-                                  for (let i = 0; i < files.length; i++) {
-                                    try {
-                                      const dt = docTypes[i] || 'lab_report';
-                                      const res = await apiService.insuranceUploadDoc(claimId, files[i], dt);
-                                      results.push({name: files[i].name, type: dt, ...res});
-                                    } catch (err) { console.error(err); }
-                                  }
-                                  setClaimData(prev => ({...prev, uploadedDocs: [...(prev.uploadedDocs || []), ...results]}));
-                                  setClaimLoading(false);
-                                }}
-                                className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:bg-indigo-600 file:text-white hover:file:bg-indigo-500"
-                              />
+                            {/* Document Type Selector & Dedicated Upload Area */}
+                            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-4">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+                                <div>
+                                  <h4 className="font-semibold text-white text-sm">Upload Required Documents</h4>
+                                  <p className="text-gray-400 text-xs mt-0.5">Select document slot or pick type before uploading to avoid tagging all as insurance card</p>
+                                </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                  <label className="text-xs text-indigo-300 font-medium whitespace-nowrap">Upload Type:</label>
+                                  <select
+                                    value={uploadDocType}
+                                    onChange={(e) => setUploadDocType(e.target.value)}
+                                    className="bg-[#0a0e1a] border border-indigo-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-400 flex-1 sm:flex-none"
+                                  >
+                                    <option value="insurance_card">💳 Insurance Card / E-Card</option>
+                                    <option value="id_proof">🆔 Patient ID Proof (Aadhaar/Govt)</option>
+                                    <option value="prescription">📋 Doctor Prescription</option>
+                                    <option value="discharge_summary">📄 Discharge Summary</option>
+                                    <option value="lab_report">🧪 Diagnostic / Lab Report</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* 4 Required Document Slots */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {[
+                                  { type: 'insurance_card', title: 'Insurance Card', icon: '💳', desc: 'Policy card or digital member ID' },
+                                  { type: 'id_proof', title: 'ID Proof (Aadhaar/Govt)', icon: '🆔', desc: 'Patient identity proof' },
+                                  { type: 'prescription', title: 'Doctor Prescription', icon: '📋', desc: 'Admission / Rx medication order' },
+                                  { type: 'discharge_summary', title: 'Discharge Summary', icon: '📄', desc: 'Clinical notes & treatment record' },
+                                ].map((slot) => {
+                                  const uploaded = (claimData.uploadedDocs || []).find(d => d.type === slot.type || d.doc_type === slot.type);
+                                  return (
+                                    <div 
+                                      key={slot.type}
+                                      className={`p-3 rounded-xl border transition-all ${
+                                        uploaded 
+                                          ? 'bg-emerald-500/10 border-emerald-500/30' 
+                                          : 'bg-white/5 border-white/10 hover:border-indigo-500/30'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-base">{slot.icon}</span>
+                                          <span className="font-medium text-white text-xs">{slot.title}</span>
+                                        </div>
+                                        {uploaded ? (
+                                          <span className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                                            <CheckCircle className="w-3.5 h-3.5" /> Uploaded
+                                          </span>
+                                        ) : (
+                                          <span className="text-amber-400 text-xs">Required</span>
+                                        )}
+                                      </div>
+                                      
+                                      <p className="text-gray-400 text-[11px] mb-2 truncate">{uploaded ? (uploaded.name || uploaded.filename) : slot.desc}</p>
+                                      
+                                      <label className="block">
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          onChange={async (e) => {
+                                            if (e.target.files && e.target.files[0]) {
+                                              const file = e.target.files[0];
+                                              setClaimLoading(true);
+                                              try {
+                                                const res = await apiService.insuranceUploadDoc(claimId, file, slot.type);
+                                                setClaimData(prev => {
+                                                  const existing = (prev.uploadedDocs || []).filter(d => d.type !== slot.type && d.doc_type !== slot.type);
+                                                  return {
+                                                    ...prev,
+                                                    uploadedDocs: [...existing, { name: file.name, type: slot.type, ...res }]
+                                                  };
+                                                });
+                                                showToast(`${slot.title} uploaded successfully!`, 'success');
+                                              } catch (err) {
+                                                console.error(err);
+                                                showToast(`Failed to upload ${slot.title}`, 'error');
+                                              }
+                                              setClaimLoading(false);
+                                            }
+                                          }}
+                                        />
+                                        <span className={`w-full py-1.5 px-3 rounded-lg text-xs font-medium cursor-pointer flex items-center justify-center gap-1.5 transition-colors ${
+                                          uploaded 
+                                            ? 'bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/30' 
+                                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                        }`}>
+                                          <Upload className="w-3 h-3" /> {uploaded ? 'Replace Document' : `Upload ${slot.title}`}
+                                        </span>
+                                      </label>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Quick File Upload with active document type */}
+                              <div className="pt-2 border-t border-white/5">
+                                <label className="block text-xs text-gray-400 mb-1">
+                                  Or browse file to upload as <span className="text-indigo-300 font-semibold">{uploadDocType.replace(/_/g, ' ')}</span>:
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={async (e) => {
+                                    if (e.target.files && e.target.files[0]) {
+                                      const file = e.target.files[0];
+                                      setClaimLoading(true);
+                                      try {
+                                        const res = await apiService.insuranceUploadDoc(claimId, file, uploadDocType);
+                                        setClaimData(prev => {
+                                          const existing = (prev.uploadedDocs || []).filter(d => d.type !== uploadDocType && d.doc_type !== uploadDocType);
+                                          return {
+                                            ...prev,
+                                            uploadedDocs: [...existing, { name: file.name, type: uploadDocType, ...res }]
+                                          };
+                                        });
+                                        showToast(`Uploaded as ${uploadDocType.replace(/_/g, ' ')}!`, 'success');
+                                        const types = ['insurance_card', 'id_proof', 'prescription', 'discharge_summary'];
+                                        const nextIdx = (types.indexOf(uploadDocType) + 1) % types.length;
+                                        setUploadDocType(types[nextIdx]);
+                                      } catch (err) {
+                                        console.error(err);
+                                        showToast('Failed to upload document', 'error');
+                                      }
+                                      setClaimLoading(false);
+                                    }
+                                  }}
+                                  className="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"
+                                />
+                              </div>
                             </div>
                             
-                            {/* Show uploaded docs */}
+                            {/* Uploaded Documents List */}
                             {(claimData.uploadedDocs || []).length > 0 && (
-                              <div className="space-y-2">
-                                {claimData.uploadedDocs.map((doc, i) => (
-                                  <div key={i} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg p-2 text-sm">
-                                    <CheckCircle className="w-4 h-4 text-green-400" />
-                                    <span className="text-white">{doc.name}</span>
-                                    <span className="text-gray-500">({doc.type.replace(/_/g, ' ')})</span>
+                              <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-1.5">
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Uploaded Files ({(claimData.uploadedDocs || []).length}):</span>
+                                {(claimData.uploadedDocs || []).map((doc, i) => (
+                                  <div key={i} className="flex items-center justify-between bg-black/20 border border-white/5 rounded-lg px-3 py-1.5 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span className="text-white font-medium">{doc.name || doc.filename}</span>
+                                    </div>
+                                    <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded font-mono text-[11px] capitalize">
+                                      {(doc.type || doc.doc_type || 'Document').replace(/_/g, ' ')}
+                                    </span>
                                   </div>
                                 ))}
                               </div>
@@ -1591,12 +1737,17 @@ const BillingPortal = () => {
                                   const res = await apiService.insuranceSubmitForReview(claimId);
                                   setClaimData(prev => ({...prev, ...res}));
                                   setClaimStep(5);
-                                } catch (err) { console.error(err); }
+                                  showToast('Claim submitted for HITL review!', 'success');
+                                } catch (err) { 
+                                  console.error(err); 
+                                  showToast('Failed to submit claim for review', 'error');
+                                }
                                 setClaimLoading(false);
                               }}
                               disabled={claimLoading}
-                              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+                              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                             >
+                              {claimLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
                               Submit for HITL Review
                             </button>
                           </div>
@@ -1622,8 +1773,26 @@ const BillingPortal = () => {
                           <Shield className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
                           <p className="text-indigo-300 font-semibold">Claim Submitted for HITL Review!</p>
                           <p className="text-gray-400 text-sm mt-1">Claim ID: {claimId}</p>
-                          <p className="text-gray-400 text-sm">Bill Amount: ₹{(claimData.bill_amount || 0).toLocaleString()}</p>
-                          <p className="text-gray-500 text-xs mt-2">Navigate to Insurance Ops portal to approve/reject this claim.</p>
+                          <div className="mt-3 p-3 bg-white/5 rounded-xl border border-white/10 max-w-sm mx-auto text-left space-y-1.5 text-xs">
+                            <div className="flex justify-between text-gray-400">
+                              <span>Insurer:</span>
+                              <span className="text-white font-medium">{insurerName}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-400">
+                              <span>Original Total Billed:</span>
+                              <span className="text-white font-mono">₹{(bill?.original_total || bill?.total_amount || claimData.original_bill_amount || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-indigo-300">
+                              <span>Insurance Concession:</span>
+                              <span className="font-mono">₹{(insuranceResult?.savings || claimData.insurance_covered || claimData.approved_amount || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="h-px bg-white/10 my-1"></div>
+                            <div className="flex justify-between text-emerald-400 font-bold text-sm">
+                              <span>Final Patient Payable:</span>
+                              <span className="font-mono">₹{(claimData.bill_amount || claimData.final_patient_payable || bill?.total_amount || 0).toLocaleString()}</span>
+                            </div>
+                          </div>
+                          <p className="text-gray-500 text-xs mt-3">Navigate to Insurance Ops portal to review & approve this claim.</p>
                         </div>
                         <button
                           onClick={async () => {
@@ -1655,9 +1824,20 @@ const BillingPortal = () => {
                           <p className="text-amber-300 font-semibold">Payment Pending</p>
                           <p className="text-gray-400 text-sm mt-1">Insurer has approved the claim. Awaiting payment confirmation.</p>
                           {claimData.claimDetails && (
-                            <div className="mt-2 text-sm">
-                              <p className="text-white">Bill: ₹{(claimData.claimDetails.bill_amount || claimData.claimDetails.amounts?.bill_amount || 0).toLocaleString()}</p>
-                              <p className="text-green-400">Approved: ₹{(claimData.claimDetails.approved_amount || claimData.claimDetails.amounts?.approved_amount || 0).toLocaleString()}</p>
+                            <div className="mt-3 p-3 bg-white/5 rounded-xl border border-white/10 max-w-sm mx-auto text-left space-y-1.5 text-xs">
+                              <div className="flex justify-between text-gray-400">
+                                <span>Original Hospital Bill:</span>
+                                <span className="text-white font-mono">₹{(claimData.claimDetails.original_bill_amount || claimData.claimDetails.amounts?.total_billed || bill?.original_total || bill?.total_amount || 0).toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between text-green-400">
+                                <span>Approved by Insurer:</span>
+                                <span className="font-mono">₹{(claimData.claimDetails.insurance_covered || claimData.claimDetails.approved_amount || claimData.claimDetails.amounts?.approved_amount || 0).toLocaleString()}</span>
+                              </div>
+                              <div className="h-px bg-white/10 my-1"></div>
+                              <div className="flex justify-between text-amber-300 font-bold text-sm">
+                                <span>Final Patient Payable:</span>
+                                <span className="font-mono">₹{(claimData.claimDetails.final_patient_payable || claimData.claimDetails.bill_amount || claimData.claimDetails.amounts?.final_patient_payable || bill?.total_amount || 0).toLocaleString()}</span>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1665,8 +1845,7 @@ const BillingPortal = () => {
                           onClick={async () => {
                             setClaimLoading(true);
                             try {
-                              const billAmt = claimData.claimDetails?.bill_amount || claimData.claimDetails?.amounts?.bill_amount || 150000;
-                              const approvedAmt = claimData.claimDetails?.approved_amount || claimData.claimDetails?.amounts?.approved_amount || billAmt * 0.9;
+                              const approvedAmt = claimData.claimDetails?.insurance_covered || claimData.claimDetails?.approved_amount || claimData.claimDetails?.amounts?.approved_amount || 0;
                               await apiService.insuranceMarkPayment(claimId, approvedAmt, 'TXN-' + Date.now());
                               setClaimStep(7);
                             } catch (err) { console.error(err); }

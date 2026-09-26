@@ -6,7 +6,7 @@ const InsurerDirectoryAdmin = () => {
   const [insurers, setInsurers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ name: '', type: 'PRIVATE', tied_up: false, channel: 'HCX' });
+  const [formData, setFormData] = useState({ name: '', type: 'PRIVATE', tied_up: true, channel: 'HCX' });
 
   const fetchDirectory = () => {
     setLoading(true);
@@ -33,16 +33,21 @@ const InsurerDirectoryAdmin = () => {
   return (
     <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <Shield className="w-6 h-6 text-indigo-400" />
-          Insurer Directory
-        </h2>
-        <button 
-          onClick={() => { setFormData({ name: '', type: 'PRIVATE', tied_up: false, channel: 'HCX' }); setShowForm(true); }}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" /> Add Insurer
-        </button>
+        <div>
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Shield className="w-6 h-6 text-indigo-400" />
+            Insurer Directory
+          </h2>
+          <p className="text-xs text-gray-400 mt-1">All network insurance companies tied up for cashless claim settlement</p>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => { setFormData({ name: '', type: 'PRIVATE', tied_up: true, channel: 'HCX' }); setShowForm(true); }}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 text-sm"
+          >
+            <Plus className="w-4 h-4" /> Add Insurer
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -70,7 +75,7 @@ const InsurerDirectoryAdmin = () => {
                     <span className="px-2.5 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-semibold">Not Tied Up</span>
                   )}
                 </td>
-                <td className="px-6 py-4">{insurer.channel}</td>
+                <td className="px-6 py-4 font-mono text-xs">{insurer.channel || insurer.claim_channel || "HCX"}</td>
                 <td className="px-6 py-4">
                   <button 
                     onClick={() => { setFormData(insurer); setShowForm(true); }}

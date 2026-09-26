@@ -14,13 +14,14 @@ def seed_insurance_data():
     db["insurance_documents"].delete_many({"claim_id": {"$regex": "^CLM-DEMO"}})
     db["insurance_policies_v2"].delete_many({"patient_id": "PAT001"})
     
-    # 5 insurer directory entries
+    # Insurers directory entries - all tied up for cashless claim
     insurers = [
-        {"name": "Star Health", "tied_up": True, "type": "cashless", "claim_channel": "hcx", "claim_email": "claims@starhealth.demo", "network_hospitals": 12000, "verification_status": "verified", "hcx_participant_code": "STAR-HCX-001"},
-        {"name": "HDFC ERGO", "tied_up": True, "type": "cashless", "claim_channel": "hcx", "claim_email": "claims@hdfcergo.demo", "network_hospitals": 13000, "verification_status": "verified", "hcx_participant_code": "HDFC-HCX-002"},
-        {"name": "Niva Bupa", "tied_up": True, "type": "cashless", "claim_channel": "email", "claim_email": "claims@nivabupa.demo", "network_hospitals": 10000, "verification_status": "verified"},
-        {"name": "ICICI Lombard", "tied_up": False, "type": "reimbursement", "claim_channel": "email", "claim_email": "claims@icicilombard.demo", "network_hospitals": 8500, "verification_status": "unverified"},
-        {"name": "Bajaj Allianz", "tied_up": False, "type": "reimbursement", "claim_channel": "email", "claim_email": "claims@bajaj.demo", "network_hospitals": 9000, "verification_status": "unverified"}
+        {"name": "Star Health", "full_name": "Star Health Insurance", "tied_up": True, "type": "cashless", "claim_channel": "HCX", "channel": "HCX", "claim_email": "claims@starhealth.demo", "network_hospitals": 12000, "verification_status": "verified", "hcx_participant_code": "STAR-HCX-001"},
+        {"name": "HDFC ERGO", "full_name": "HDFC ERGO Health", "tied_up": True, "type": "cashless", "claim_channel": "HCX", "channel": "HCX", "claim_email": "claims@hdfcergo.demo", "network_hospitals": 13000, "verification_status": "verified", "hcx_participant_code": "HDFC-HCX-002"},
+        {"name": "Niva Bupa", "full_name": "Niva Bupa (Max Bupa)", "tied_up": True, "type": "cashless", "claim_channel": "HCX", "channel": "HCX", "claim_email": "claims@nivabupa.demo", "network_hospitals": 10000, "verification_status": "verified", "hcx_participant_code": "NIVA-HCX-003"},
+        {"name": "ICICI Lombard", "full_name": "ICICI Lombard", "tied_up": True, "type": "cashless", "claim_channel": "HCX", "channel": "HCX", "claim_email": "claims@icicilombard.demo", "network_hospitals": 8500, "verification_status": "verified", "hcx_participant_code": "ICICI-HCX-004"},
+        {"name": "Bajaj Allianz", "full_name": "Bajaj Allianz", "tied_up": True, "type": "cashless", "claim_channel": "HCX", "channel": "HCX", "claim_email": "claims@bajaj.demo", "network_hospitals": 9000, "verification_status": "verified", "hcx_participant_code": "BAJAJ-HCX-005"},
+        {"name": "Ayushman Bharat", "full_name": "Ayushman Bharat (PMJAY)", "tied_up": True, "type": "cashless", "claim_channel": "HCX", "channel": "HCX", "claim_email": "claims@pmjay.demo", "network_hospitals": 25000, "verification_status": "verified", "hcx_participant_code": "PMJAY-HCX-006"}
     ]
     db["insurer_directory"].insert_many(insurers)
     
@@ -29,7 +30,18 @@ def seed_insurance_data():
     patient_name = patient.get("name", "John Smith") if patient else "John Smith"
     diagnosis = patient.get("diagnosis", "Acute Myocardial Infarction") if patient else "Acute Myocardial Infarction"
     
-    # Create demo claim at WAITING_FOR_HUMAN_APPROVAL
+    # Calculate bill and insurance concession matching Billing Portal
+    from agents.billing_agent import calculate_bill
+    from agents.insurance_agent import calculate_insurance_concession
+    patient_for_bill = patient or {"patient_id": "PAT001", "name": patient_name, "admission_date": "2025-09-20", "diagnosis": diagnosis}
+    bill = calculate_bill(patient_for_bill)
+    orig_bill = bill.get("total_amount", 40120)
+    concession = calculate_insurance_concession(orig_bill, "star_health", diagnosis)
+    final_payable = concession.get("final_amount", orig_bill)
+    savings = concession.get("savings", 0)
+    copay = concession.get("copay_amount", 0)
+
+    # Create demo claim at WAITING_FOR_HUMAN_APPROVAL with accurate final payable
     claim_id = "CLM-DEMO-001"
     claim = {
         "claim_id": claim_id,
@@ -41,8 +53,12 @@ def seed_insurance_data():
         "member_id": "MEM-SH-12345",
         "policy_type": "individual",
         "diagnosis": diagnosis,
-        "bill_amount": 185000,
-        "approved_amount": 0,
+        "original_bill_amount": orig_bill,
+        "bill_amount": final_payable,  # The final amount which patient needs to pay after applying insurance
+        "final_patient_payable": final_payable,
+        "insurance_covered": savings,
+        "approved_amount": savings,
+        "copay_amount": copay,
         "received_amount": 0,
         "channel": "hcx",
         "policy_findings": "Coverage includes cardiac procedures up to \u20b95,00,000. Co-pay: 10%. Room rent limit: \u20b94,000/day. Pre-authorization required for cardiac interventions.",

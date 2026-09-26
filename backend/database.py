@@ -41,8 +41,124 @@ def get_database():
 def get_nurse_email():
     return NURSE_EMAIL
 
+def init_insurer_directory():
+    """Ensure all insurance companies are tied up by default and available in insurer_directory."""
+    default_insurers = [
+        {
+            "name": "Star Health",
+            "full_name": "Star Health Insurance",
+            "tied_up": True,
+            "type": "cashless",
+            "claim_channel": "HCX",
+            "channel": "HCX",
+            "claim_email": "claims@starhealth.demo",
+            "network_hospitals": 12000,
+            "verification_status": "verified",
+            "hcx_participant_code": "STAR-HCX-001",
+            "plan_name": "Family Health Optima",
+            "bill_concession_percent": 70,
+            "copay_percent": 10,
+            "max_coverage": 500000
+        },
+        {
+            "name": "HDFC ERGO",
+            "full_name": "HDFC ERGO Health",
+            "tied_up": True,
+            "type": "cashless",
+            "claim_channel": "HCX",
+            "channel": "HCX",
+            "claim_email": "claims@hdfcergo.demo",
+            "network_hospitals": 13000,
+            "verification_status": "verified",
+            "hcx_participant_code": "HDFC-HCX-002",
+            "plan_name": "Optima Secure",
+            "bill_concession_percent": 65,
+            "copay_percent": 5,
+            "max_coverage": 750000
+        },
+        {
+            "name": "Niva Bupa",
+            "full_name": "Niva Bupa (Max Bupa)",
+            "tied_up": True,
+            "type": "cashless",
+            "claim_channel": "HCX",
+            "channel": "HCX",
+            "claim_email": "claims@nivabupa.demo",
+            "network_hospitals": 10000,
+            "verification_status": "verified",
+            "hcx_participant_code": "NIVA-HCX-003",
+            "plan_name": "Health Recharge",
+            "bill_concession_percent": 60,
+            "copay_percent": 15,
+            "max_coverage": 1000000
+        },
+        {
+            "name": "ICICI Lombard",
+            "full_name": "ICICI Lombard",
+            "tied_up": True,
+            "type": "cashless",
+            "claim_channel": "HCX",
+            "channel": "HCX",
+            "claim_email": "claims@icicilombard.demo",
+            "network_hospitals": 8500,
+            "verification_status": "verified",
+            "hcx_participant_code": "ICICI-HCX-004",
+            "plan_name": "Health AdvantEdge",
+            "bill_concession_percent": 55,
+            "copay_percent": 20,
+            "max_coverage": 500000
+        },
+        {
+            "name": "Bajaj Allianz",
+            "full_name": "Bajaj Allianz",
+            "tied_up": True,
+            "type": "cashless",
+            "claim_channel": "HCX",
+            "channel": "HCX",
+            "claim_email": "claims@bajaj.demo",
+            "network_hospitals": 9000,
+            "verification_status": "verified",
+            "hcx_participant_code": "BAJAJ-HCX-005",
+            "plan_name": "Health Guard Gold",
+            "bill_concession_percent": 50,
+            "copay_percent": 15,
+            "max_coverage": 400000
+        },
+        {
+            "name": "Ayushman Bharat",
+            "full_name": "Ayushman Bharat (PMJAY)",
+            "tied_up": True,
+            "type": "cashless",
+            "claim_channel": "HCX",
+            "channel": "HCX",
+            "claim_email": "claims@pmjay.demo",
+            "network_hospitals": 25000,
+            "verification_status": "verified",
+            "hcx_participant_code": "PMJAY-HCX-006",
+            "plan_name": "Government Scheme",
+            "bill_concession_percent": 100,
+            "copay_percent": 0,
+            "max_coverage": 500000
+        }
+    ]
+    for ins in default_insurers:
+        db["insurer_directory"].update_one(
+            {"name": ins["name"]},
+            {"$set": ins},
+            upsert=True
+        )
+    # Ensure every insurer in the directory has tied_up=True
+    db["insurer_directory"].update_many({}, {"$set": {"tied_up": True, "type": "cashless", "verification_status": "verified"}})
+
+# Run insurer directory initialization on import
+try:
+    init_insurer_directory()
+except Exception as _e:
+    print(f"Insurer directory init warning: {_e}")
+
 # Sample data initialization
 def init_sample_data():
+    init_insurer_directory()
     if patients_collection.count_documents({}) == 0:
         sample_patients = [
             {

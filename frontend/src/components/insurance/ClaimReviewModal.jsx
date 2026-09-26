@@ -90,8 +90,8 @@ const ClaimReviewModal = ({ claimId, isOpen, onClose, onReviewComplete }) => {
                   <div className="flex justify-between"><span className="text-gray-500">Policy Type</span> <span className="font-medium text-white">{data.insurance?.policy_type || 'N/A'}</span></div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Tie-up Status</span> 
-                    {data.insurance?.is_tied_up ? (
-                       <span className="flex items-center gap-1 text-emerald-400 text-sm font-medium"><CheckCircle className="w-4 h-4"/> Verified</span>
+                    {(data.insurance?.is_tied_up ?? data.insurer_directory?.tied_up ?? true) ? (
+                       <span className="flex items-center gap-1 text-emerald-400 text-sm font-medium"><CheckCircle className="w-4 h-4"/> Verified Network</span>
                     ) : (
                        <span className="flex items-center gap-1 text-red-400 text-sm font-medium"><AlertTriangle className="w-4 h-4"/> No Tie-up</span>
                     )}
@@ -104,10 +104,10 @@ const ClaimReviewModal = ({ claimId, isOpen, onClose, onReviewComplete }) => {
                 <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign className="w-24 h-24" /></div>
                 <h3 className="text-sm font-semibold text-indigo-300 uppercase tracking-wider mb-4">Claim Amounts</h3>
                 <div className="space-y-3 relative z-10">
-                  <div className="flex justify-between items-center"><span className="text-gray-400">Total Billed</span> <span className="text-xl font-medium text-white">₹{data.amounts?.total_billed?.toLocaleString() || 0}</span></div>
-                  <div className="flex justify-between items-center"><span className="text-gray-400">Estimated Coverage</span> <span className="text-xl font-medium text-emerald-400">₹{data.amounts?.estimated_coverage?.toLocaleString() || 0}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Original Total Billed</span> <span className="text-xl font-medium text-white">₹{(data.amounts?.total_billed ?? data.amounts?.original_billed ?? data.claim?.original_bill_amount ?? 0).toLocaleString()}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Insurance Coverage</span> <span className="text-xl font-medium text-emerald-400">₹{(data.amounts?.estimated_coverage ?? data.claim?.insurance_covered ?? data.amounts?.approved_amount ?? 0).toLocaleString()}</span></div>
                   <div className="h-px w-full bg-white/10 my-2"></div>
-                  <div className="flex justify-between items-center"><span className="text-gray-300 font-medium">Patient Payable</span> <span className="text-2xl font-bold text-rose-400">₹{data.amounts?.patient_payable?.toLocaleString() || 0}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-300 font-medium">Final Patient Payable</span> <span className="text-2xl font-bold text-rose-400">₹{(data.amounts?.final_patient_payable ?? data.amounts?.patient_payable ?? data.amounts?.bill_amount ?? data.claim?.final_patient_payable ?? 0).toLocaleString()}</span></div>
                 </div>
               </div>
 
